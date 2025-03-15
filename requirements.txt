@@ -1,9 +1,10 @@
-Flask==3.0.0
-python-dotenv==1.0.0
-APScheduler==3.10.1
-google-api-python-client==2.86.0
-google-auth-oauthlib==0.8.0
-openai==1.0.0
-python-dateutil==2.8.2
-SQLAlchemy==2.0.27
-requests==2.31.0
+Flask==3.0.0                      # Web framework
+python-dotenv==1.0.0              # Environment variable management
+APScheduler==3.10.1               # For scheduling email checks
+google-api-python-client==2.86.0  # Gmail API integration
+google-auth-oauthlib==0.8.0       # Google authentication
+openai==1.0.0                     # OpenAI integration for email classification
+python-dateutil==2.8.2            # Date handling
+SQLAlchemy==2.0.27                # Database operations
+requests==2.31.0                  # HTTP requests
+aiohttp==3.8.1                    # Async HTTP requests for better performance
