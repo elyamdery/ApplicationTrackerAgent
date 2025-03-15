@@ -1,0 +1,49 @@
+# Virtual Environment
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Database
+*.db
+*.sqlite3
+*.sqlite
+
+# Environment variables
+.env
+.env.*
+
+# VS Code
+.vscode/
+*.code-workspace
+.history
+
+# Credentials and tokens
+credentials.json
+token.json
+
+# Generated files
+*.csv
+*.log
+*.pdf
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
