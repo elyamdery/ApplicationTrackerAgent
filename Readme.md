@@ -46,7 +46,7 @@ python MainFlow.py
 - Update status manually
 - Search and filter applications
 - Export data to CSV
-- Delete applications
+- Delete applications & Edit existing applications
 
 #### Status Tracking
 - Pending (Grey)
