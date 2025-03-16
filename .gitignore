@@ -30,6 +30,7 @@ token.json
 *.csv
 *.log
 *.pdf
+*.avi
 
 # IDE
 .idea/
