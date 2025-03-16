@@ -47,3 +47,6 @@ Desktop.ini
 dist/
 build/
 *.egg-info/
+
+# Pytest cache
+.pytest_cache/
