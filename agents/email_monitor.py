@@ -69,10 +69,39 @@ class EmailMonitorAgent:
         """
         Process an application-related email.
         """
+        # Extract relevant information from the email
+        subject = email.get('subject')
+        sender = email.get('from')
+        body = email.get('body')
+
+        # Determine the status based on the email content
+        status = 'Pending'
+        if 'interview' in body.lower():
+            status = 'Interview'
+        elif 'offer' in body.lower():
+            status = 'Offer'
+        elif 'rejection' in body.lower():
+            status = 'Rejected'
+
+        # Check if the application already exists
+        conn = get_db_connection()
+        cursor = conn.execute('SELECT * FROM applications WHERE company = ? AND role = ?', (sender, subject))
+        application = cursor.fetchone()
+
+        if application:
+            # Update existing application status
+            conn.execute('UPDATE applications SET status = ? WHERE company = ? AND role = ?', (status, sender, subject))
+        else:
+            # Add new application
+            conn.execute('INSERT INTO applications (company, role, job_type, country, source, date_applied, resume_version, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (sender, subject, 'Unknown', 'Unknown', 'Email', datetime.now().strftime('%Y-%m-%d'), subject, status))
+
+        conn.commit()
+        conn.close()
+
         return {
-            'subject': email.get('subject'),
+            'subject': subject,
             'date': email.get('date'),
-            'sender': email.get('sender'),
-            'body': email.get('body'),
+            'sender': sender,
+            'body': body,
             'processed_date': datetime.now().isoformat()
         }
