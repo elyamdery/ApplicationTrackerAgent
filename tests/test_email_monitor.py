@@ -5,7 +5,7 @@ Tests for Email Monitor Agent functionality
 import pytest
 from datetime import datetime
 from agents.email_monitor import EmailMonitorAgent
-from utils.screen_recorder import ScreenRecorder
+from utils.screen_recorder import ScreenRecorder # type: ignore
 
 @pytest.fixture
 def email_agent():
