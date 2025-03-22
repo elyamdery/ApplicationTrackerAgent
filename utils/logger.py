@@ -6,12 +6,13 @@ import logging
 import os
 from datetime import datetime
 
-def setup_logger(name: str):
+def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     """
     Creates a logger with both console and file output
     
     Args:
         name (str): Name of the logger (usually __name__ from the calling module)
+        level (int): Logging level (default is logging.INFO)
     Returns:
         logging.Logger: Configured logger instance
     """
@@ -21,15 +22,14 @@ def setup_logger(name: str):
 
     # Create logger
     logger = logging.getLogger(name)
+    logger.setLevel(level)
     
     # Only add handlers if they don't exist
     if not logger.handlers:
-        logger.setLevel(logging.DEBUG)
-
         # Console handler
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        console_format = logging.Formatter('%(levelname)s - %(message)s')
+        console_handler.setLevel(level)
+        console_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         console_handler.setFormatter(console_format)
         
         # File handler

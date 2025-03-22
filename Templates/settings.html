@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application Tracker - Settings</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <style>
+        .settings-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-control {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        .action-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+        }
+        .btn {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .btn-primary {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .btn-secondary {
+            background-color: #2196F3;
+            color: white;
+        }
+        .status-message {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            display: none;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .section {
+            margin-top: 40px;
+        }
+        .auth-section .status-card {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .auth-section .status-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .auth-section .status-item .label {
+            font-weight: bold;
+        }
+        .auth-section .status-item .value.true {
+            color: #4CAF50;
+        }
+        .auth-section .status-item .value.false {
+            color: #f44336;
+        }
+        .auth-actions {
+            display: flex;
+            justify-content: space-between;
+        }
+        .auth-actions .button {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            text-decoration: none;
+            text-align: center;
+        }
+        .auth-actions .button.primary {
+            background-color: #4CAF50;
+            color: white;
+        }
+        .auth-actions .button.secondary {
+            background-color: #2196F3;
+            color: white;
+        }
+        .auth-actions .button.danger {
+            background-color: #f44336;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="settings-container">
+        <h1>Application Tracker Settings</h1>
+        
+        <div class="form-group">
+            <label for="email">Monitored Email Address</label>
+            <input type="email" id="email" class="form-control" value="{{ email }}">
+            <small>This email will be used to scan for job applications and receive notifications</small>
+        </div>
+        
+        <div class="action-row">
+            <button id="save-btn" class="btn btn-primary">Save Settings</button>
+            <button id="scan-btn" class="btn btn-secondary">Scan Email Now</button>
+            <a href="/" class="btn">Back to Applications</a>
+        </div>
+        
+        <div id="status-message" class="status-message"></div>
+        
+        <div class="section auth-section">
+            <h2>Gmail Authentication</h2>
+            
+            <div class="status-card">
+                <div class="status-item">
+                    <span class="label">Connection Status:</span>
+                    <span class="value {{ 'true' if is_authenticated else 'false' }}">
+                        {{ 'Connected' if is_authenticated else 'Not connected' }}
+                    </span>
+                </div>
+                
+                <div class="status-item">
+                    <span class="label">Monitored Email:</span>
+                    <span class="value {{ 'true' if is_authenticated else 'false' }}">
+                        {{ monitored_email if is_authenticated else 'None' }}
+                    </span>
+                </div>
+                
+                <div class="status-item">
+                    <span class="label">Token File Exists:</span>
+                    <span class="value {{ 'true' if has_token_file else 'false' }}">
+                        {{ 'Yes' if has_token_file else 'No' }}
+                    </span>
+                </div>
+                
+                <div class="status-item">
+                    <span class="label">Credentials Valid:</span>
+                    <span class="value {{ 'true' if credentials_valid else 'false' }}">
+                        {{ 'Yes' if credentials_valid else 'No' }}
+                    </span>
+                </div>
+            </div>
+            
+            <div class="auth-actions">
+                <a href="/start_auth" class="button primary">Start Authentication</a>
+                {% if has_token_file %}
+                    <a href="/clear_token" class="button danger">Clear Token</a>
+                {% endif %}
+                <a href="/auth_status" class="button secondary">View Detailed Auth Status</a>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('save-btn').addEventListener('click', function() {
+            const email = document.getElementById('email').value.trim();
+            
+            if (!email || !email.includes('@')) {
+                showMessage('Please enter a valid email address', 'error');
+                return;
+            }
+            
+            fetch('/settings/email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email: email })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showMessage('Email updated successfully', 'success');
+                } else {
+                    showMessage(data.error || 'Failed to update email', 'error');
+                }
+            })
+            .catch(error => {
+                showMessage('An error occurred', 'error');
+                console.error('Error:', error);
+            });
+        });
+        
+        document.getElementById('scan-btn').addEventListener('click', function() {
+            showMessage('Scanning emails... This may take a moment.', 'success');
+            
+            fetch('/scan_now')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showMessage(data.message, 'success');
+                    } else {
+                        showMessage(data.error || 'Failed to scan emails', 'error');
+                    }
+                })
+                .catch(error => {
+                    showMessage('An error occurred during scanning', 'error');
+                    console.error('Error:', error);
+                });
+        });
+        
+        function showMessage(message, type) {
+            const statusEl = document.getElementById('status-message');
+            statusEl.textContent = message;
+            statusEl.className = `status-message ${type}`;
+            statusEl.style.display = 'block';
+            
+            // Optionally hide after some time
+            setTimeout(() => {
+                statusEl.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

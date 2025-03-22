@@ -271,4 +271,376 @@ document.addEventListener("DOMContentLoaded", function () {
         const date = new Date(dateString);
         return date.toISOString().split('T')[0];
     }
+
+   // Status bar functionality
+    const scanBtn = document.getElementById('scan-now-btn');
+    const scanText = document.getElementById('scan-text');
+    const scanSpinner = document.getElementById('scan-spinner');
+    const statusMessage = document.getElementById('status-message');
+    const connectionDot = document.getElementById('connection-dot');
+    const lastScanEl = document.getElementById('last-scan');
+    
+    if (scanBtn) {
+        scanBtn.addEventListener('click', function() {
+            // Show scanning status
+            scanBtn.disabled = true;
+            scanText.textContent = 'Scanning...';
+            scanSpinner.style.display = 'inline-block';
+            statusMessage.textContent = 'Scanning emails for new applications...';
+            
+            // Call the scan endpoint
+            fetch('/scan_now')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        statusMessage.textContent = data.message;
+                        lastScanEl.textContent = 'Last scan: Just now';
+                        
+                        // Reload the page after a delay to show updated applications
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 2000);
+                    } else {
+                        statusMessage.textContent = 'Error: ' + (data.error || 'Failed to scan');
+                        connectionDot.classList.remove('connected');
+                        connectionDot.classList.add('disconnected');
+                    }
+                })
+                .catch(error => {
+                    statusMessage.textContent = 'Error connecting to server';
+                    connectionDot.classList.remove('connected');
+                    connectionDot.classList.add('disconnected');
+                    console.error('Error:', error);
+                })
+                .finally(() => {
+                    scanBtn.disabled = false;
+                    scanText.textContent = 'Scan Now';
+                    scanSpinner.style.display = 'none';
+                });
+        });
+    }
+    
+    // Set today's date when checkbox is clicked
+    const todayCheckbox = document.getElementById('today');
+    const dateInput = document.getElementById('date_applied');
+    
+    if (todayCheckbox && dateInput) {
+        todayCheckbox.addEventListener('change', function() {
+            if (this.checked) {
+                const today = new Date();
+                const year = today.getFullYear();
+                const month = String(today.getMonth() + 1).padStart(2, '0');
+                const day = String(today.getDate()).padStart(2, '0');
+                dateInput.value = `${year}-${month}-${day}`;
+                dateInput.disabled = true;
+            } else {
+                dateInput.disabled = false;
+            }
+        });
+    }
+    
+    // Form submission handling
+    const applicationForm = document.getElementById('application-form');
+    if (applicationForm) {
+        applicationForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                company: document.getElementById('company').value,
+                role: document.getElementById('role').value,
+                job_type: document.getElementById('job_type').value,
+                country: document.getElementById('country').value,
+                date_applied: document.getElementById('date_applied').value,
+                source: document.getElementById('source').value,
+                resume_version: '1.0', // Default value
+                status: 'Pending' // Default status
+            };
+            
+            // Validate all fields are filled
+            for (const [key, value] of Object.entries(formData)) {
+                if (!value) {
+                    alert(`Please fill out the ${key.replace('_', ' ')} field!`);
+                    return;
+                }
+            }
+            
+            fetch('/add_application', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    alert("Application added successfully!");
+                    applicationForm.reset();
+                    window.location.reload();
+                } else {
+                    alert(data.error || 'Failed to add application');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while adding the application');
+            });
+        });
+    }
+    
+    // Status change handling
+    const statusSelects = document.querySelectorAll('.status-select');
+    statusSelects.forEach(select => {
+        select.addEventListener('change', function() {
+            const company = this.getAttribute('data-company');
+            const role = this.getAttribute('data-role');
+            const newStatus = this.value;
+            const row = this.closest('tr');
+            
+            fetch('/update_status', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    company: company,
+                    role: role,
+                    status: newStatus
+                }),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // Update row class for styling
+                    row.className = '';
+                    row.classList.add('status-' + newStatus.toLowerCase());
+                } else {
+                    alert(data.error || 'Failed to update status');
+                    // Reset select to previous value if update failed
+                    this.value = row.className.split('-')[1];
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while updating the status');
+                // Reset select to previous value
+                this.value = row.className.split('-')[1];
+            });
+        });
+    });
+    
+    // Handle delete buttons
+    const deleteButtons = document.querySelectorAll('.delete-btn');
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            if (confirm('Are you sure you want to delete this application?')) {
+                const company = this.getAttribute('data-company');
+                const role = this.getAttribute('data-role');
+                
+                fetch('/delete_application', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        company: company,
+                        role: role
+                    }),
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        alert("Application deleted successfully!");
+                        window.location.reload();
+                    } else {
+                        alert(data.error || 'Failed to delete application');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('An error occurred while deleting the application');
+                });
+            }
+        });
+    });
+    
+    // Edit modal functionality
+    const editModal = document.getElementById('editModal');
+    const closeBtn = document.querySelector('.close');
+    const editButtons = document.querySelectorAll('.edit-btn');
+    const editForm = document.getElementById('edit-form');
+    
+    editButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const company = this.getAttribute('data-company');
+            const role = this.getAttribute('data-role');
+            const jobType = this.getAttribute('data-job-type');
+            const country = this.getAttribute('data-country');
+            const date = this.getAttribute('data-date');
+            const source = this.getAttribute('data-source');
+            
+            document.getElementById('edit-original-company').value = company;
+            document.getElementById('edit-original-role').value = role;
+            document.getElementById('edit-company').value = company;
+            document.getElementById('edit-role').value = role;
+            document.getElementById('edit-job_type').value = jobType;
+            document.getElementById('edit-country').value = country;
+            document.getElementById('edit-date_applied').value = formatDate(date);
+            document.getElementById('edit-source').value = source;
+            
+            editModal.style.display = 'block';
+        });
+    });
+    
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function() {
+            editModal.style.display = 'none';
+        });
+    }
+    
+    window.addEventListener('click', function(event) {
+        if (event.target == editModal) {
+            editModal.style.display = 'none';
+        }
+    });
+    
+    if (editForm) {
+        editForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = {
+                original_company: document.getElementById('edit-original-company').value,
+                original_role: document.getElementById('edit-original-role').value,
+                company: document.getElementById('edit-company').value,
+                role: document.getElementById('edit-role').value,
+                job_type: document.getElementById('edit-job_type').value,
+                country: document.getElementById('edit-country').value,
+                date_applied: document.getElementById('edit-date_applied').value,
+                source: document.getElementById('edit-source').value
+            };
+            
+            // Validate all fields
+            for (const [key, value] of Object.entries(formData)) {
+                if (!value && !key.startsWith('original_')) {
+                    alert(`Please fill out the ${key.replace('_', ' ')} field!`);
+                    return;
+                }
+            }
+            
+            fetch('/edit_application', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData),
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    alert("Application updated successfully!");
+                    editModal.style.display = 'none';
+                    window.location.reload();
+                } else {
+                    alert(data.error || 'Failed to update application');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while updating the application');
+            });
+        });
+    }
+    
+    // Search functionality
+    const searchInput = document.getElementById('search');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const searchTerm = this.value.toLowerCase();
+            const rows = document.querySelectorAll('#applications-table tbody tr');
+            
+            rows.forEach(row => {
+                const company = row.cells[0].textContent.toLowerCase();
+                const role = row.cells[1].textContent.toLowerCase();
+                
+                if (company.includes(searchTerm) || role.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    }
+    
+    // Export to CSV functionality
+    const exportBtn = document.getElementById('export-btn');
+    if (exportBtn) {
+        exportBtn.addEventListener('click', function() {
+            fetch('/export_csv')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'job_applications.csv';
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Failed to export data');
+                });
+        });
+    }
+    
+    // Helper function to format date
+    function formatDate(dateString) {
+        try {
+            // Handle different date formats
+            if (dateString.includes('-')) {
+                // Already in YYYY-MM-DD format
+                return dateString;
+            }
+            
+            // Convert from other formats
+            const date = new Date(dateString);
+            if (isNaN(date.getTime())) {
+                // If invalid date, return original
+                return dateString;
+            }
+            
+            // Format as YYYY-MM-DD
+            return date.toISOString().split('T')[0];
+        } catch (e) {
+            console.error("Error formatting date:", e);
+            return dateString;
+        }
+    }
 });

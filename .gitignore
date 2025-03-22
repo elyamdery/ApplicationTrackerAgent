@@ -1,36 +1,44 @@
 # Virtual Environment
 venv/
 env/
+.venv/
 
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+.pytest_cache/
+.coverage
+htmlcov/
 
 # Database
 *.db
 *.sqlite3
 *.sqlite
+job_applications.db
 
-# Environment variables
+# Sensitive files
 .env
-.env.*
+credentials.json
+client_secret*.json
+token.pickle
+*.pickle
+*.key
+
+# Generated files
+*.csv
+*.log
+logs/
+*.pdf
+*.avi
+*.mp4
+exported_data/
 
 # VS Code
 .vscode/
 *.code-workspace
 .history
-
-# Credentials and tokens
-credentials.json
-token.json
-
-# Generated files
-*.csv
-*.log
-*.pdf
-*.avi
 
 # IDE
 .idea/
@@ -49,5 +57,50 @@ dist/
 build/
 *.egg-info/
 
-# Pytest cache
-.pytest_cache/
+# Flask
+instance/
+
+# Email Dumps
+email_dumps/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Temporary files
+*.tmp
+tmp/
+temp/
+.temp/
+
+# Local configuration overrides
+*.local.*
+config.local.*
+local_settings.py
+
+# Application-specific cache
+.cache/
+__cache__/
+
+# User uploads (if applicable)
+uploads/
+user_data/
+
+# Backup files
+*.bak
+*~
+*.swp
+*.old
+
+# Test data
+test_data/
+
+# Secret keys and certificates
+*.pem
+*.crt
+*.key
+*.cert
+
+# Environment management
+.python-version
+.tool-versions
