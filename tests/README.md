@@ -6,6 +6,7 @@ This directory contains automation tests for the Application Tracker application
 
 - **Postman Tests**: API tests using Postman
 - **Selenium Tests**: UI tests using Selenium WebDriver
+- **Screen Recording**: Utility for recording test execution
 
 ## Directory Structure
 
@@ -16,16 +17,71 @@ tests/
 │   └── README.md
 ├── selenium/
 │   ├── test_dashboard.py
+│   ├── test_dashboard_with_recording.py
 │   ├── test_settings.py
 │   ├── test_guide.py
 │   └── README.md
+├── utils/
+│   ├── screen_recorder.py
+│   ├── base_test.py
+│   ├── test_with_recording.py
+│   └── README.md
+├── recordings/  # Created automatically when tests run
 └── README.md
 ```
 
 ## Getting Started
 
-1. Make sure the Application Tracker server is running on `http://localhost:8080`
-2. Follow the instructions in the README files in each subdirectory to set up and run the tests
+1. Install the required dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+2. Make sure the Application Tracker server is running on `http://localhost:8080`
+3. Follow the instructions in the README files in each subdirectory to set up and run the tests
+
+## Screen Recording
+
+The screen recorder utility allows you to record the screen during test execution, making it easier to debug and review tests.
+
+### Basic Usage
+
+```python
+from utils import ScreenRecorder
+
+# Create a recorder instance
+recorder = ScreenRecorder()
+
+# Start recording
+recorder.start_recording("my_test")
+
+# Perform test actions...
+
+# Stop recording
+recorder.stop_recording()
+```
+
+### Using with Selenium Tests
+
+The easiest way to use the screen recorder with Selenium tests is to inherit from the `BaseTest` class:
+
+```python
+from utils import BaseTest
+
+class MyTest(BaseTest):
+    def test_something(self):
+        # Recording starts automatically if RECORD_ALL_TESTS is True
+        # Otherwise, you can start it explicitly:
+        self.start_recording()
+
+        # Your test code here...
+
+        # Stop recording (optional, will be stopped in tearDown if not)
+        self.stop_recording()
+```
+
+See the `utils/README.md` file for more details on the screen recorder.
 
 ## Learning Automation Testing
 
