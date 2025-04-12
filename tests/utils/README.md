@@ -13,6 +13,7 @@ The `ScreenRecorder` class allows you to record the screen during test execution
 - Automatically creates output directories
 - Configurable frame rate and video codec
 - Saves recordings with test names and timestamps
+- Option to create unique folders for each test
 
 ### Requirements
 
@@ -33,6 +34,9 @@ from utils import ScreenRecorder
 
 # Create a recorder instance
 recorder = ScreenRecorder()
+
+# Or create a recorder with unique folders for each test
+recorder = ScreenRecorder(use_unique_folders=True)
 
 # Start recording
 recorder.start_recording("my_test")
@@ -55,9 +59,9 @@ class MyTest(BaseTest):
         # Recording starts automatically if RECORD_ALL_TESTS is True
         # Otherwise, you can start it explicitly:
         self.start_recording()
-        
+
         # Your test code here...
-        
+
         # Stop recording (optional, will be stopped in tearDown if not)
         self.stop_recording()
 ```
@@ -68,6 +72,7 @@ The `BaseTest` class supports the following environment variables:
 
 - `RECORD_ALL_TESTS`: Set to "true" to automatically record all tests
 - `RECORDING_DIR`: Directory where recordings will be saved (default: "../recordings")
+- `USE_UNIQUE_FOLDERS`: Set to "true" to create a unique folder for each test
 
 Example:
 
@@ -75,10 +80,12 @@ Example:
 # Windows
 set RECORD_ALL_TESTS=true
 set RECORDING_DIR=C:\test_recordings
+set USE_UNIQUE_FOLDERS=true
 
 # Linux/Mac
 export RECORD_ALL_TESTS=true
 export RECORDING_DIR=/path/to/recordings
+export USE_UNIQUE_FOLDERS=true
 ```
 
 ### Example
@@ -105,7 +112,7 @@ class MyTest(BaseTest):
     def setUp(self):
         super().setUp()
         self.driver.get("http://localhost:8080")
-    
+
     def test_something(self):
         # Your test code here...
         pass

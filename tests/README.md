@@ -81,7 +81,50 @@ class MyTest(BaseTest):
         self.stop_recording()
 ```
 
+### Using Unique Folders for Each Test
+
+You can configure the screen recorder to save recordings in unique folders for each test:
+
+```python
+# Create a recorder with unique folders
+recorder = ScreenRecorder(use_unique_folders=True)
+
+# Or set the environment variable
+os.environ["USE_UNIQUE_FOLDERS"] = "true"
+```
+
+This will create a separate folder for each test, making it easier to organize and review test recordings.
+
+### Environment Variables
+
+The screen recorder supports the following environment variables:
+
+- `RECORD_ALL_TESTS`: Set to "true" to automatically record all tests
+- `RECORDING_DIR`: Directory where recordings will be saved
+- `USE_UNIQUE_FOLDERS`: Set to "true" to create a unique folder for each test
+
 See the `utils/README.md` file for more details on the screen recorder.
+
+## Postman Test Recording
+
+The Postman tests also support recording test execution in unique folders:
+
+### Global Variables
+
+The Postman collection sets the following global variables:
+
+- `USE_UNIQUE_FOLDERS`: Whether to create a unique folder for each test (default: true)
+- `RESPONSE_DIR`: Directory where responses will be saved
+- `LOG_DIR`: Directory where logs will be saved
+
+### Utility Functions
+
+The collection includes utility functions for saving responses and logs:
+
+- `saveResponseToFile(testName, useUniqueFolder, baseDir)`: Saves the current response to a file
+- `logToFile(testName, message, level, useUniqueFolder, baseDir)`: Logs a message to a file
+
+See the `postman/README.md` file for more details on the Postman test recording.
 
 ## Learning Automation Testing
 
