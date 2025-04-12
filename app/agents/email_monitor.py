@@ -12,17 +12,6 @@ from typing import List, Dict, Any
 
 # Configure logging
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-# Add console handler if not already added
-if not logger.handlers:
-    console_handler = logging.StreamHandler()
-    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-
-# Import directly from MainFlow instead of utils
-from MainFlow import get_db_connection
 
 class EmailMonitorAgent:
     """Agent responsible for monitoring and processing emails."""
@@ -33,7 +22,7 @@ class EmailMonitorAgent:
         self.last_check_time = datetime.now()
         logger.info(f"Email Monitor Agent initialized at {self.last_check_time}")
 
-    async def scan_emails(self, lookback_days: int = 7, target_email: str = None) -> List[Dict[str, Any]]:
+    def scan_emails(self, lookback_days: int = 7, target_email: str = None) -> List[Dict[str, Any]]:
         """
         Scan emails for application-related content.
         Args:
@@ -121,61 +110,29 @@ class EmailMonitorAgent:
         
         return body_text
 
-    def _is_application_related(self, email: Dict[str, Any]) -> bool:
-        """
-        Check if an email is application-related.
-        """
-        keywords = [
-            'application',
-            'interview',
-            'job opportunity',
-            'position',
-            'offer',
-            'rejection'
-        ]
-        
-        subject = email.get('subject', '').lower()
-        body = email.get('body', '').lower()
-        
-        return any(keyword in subject or body for keyword in keywords)
-
-    async def _process_email(self, email: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Process an application-related email.
-        """
-        # Extract relevant information from the email
-        subject = email.get('subject')
-        sender = email.get('from')
-        body = email.get('body')
-
-        # Determine the status based on the email content
-        status = 'Pending'
-        if 'interview' in body.lower():
-            status = 'Interview'
-        elif 'offer' in body.lower():
-            status = 'Offer'
-        elif 'rejection' in body.lower():
-            status = 'Rejected'
-
-        # Check if the application already exists
-        conn = get_db_connection()
-        cursor = conn.execute('SELECT * FROM applications WHERE company = ? AND role = ?', (sender, subject))
-        application = cursor.fetchone()
-
-        if application:
-            # Update existing application status
-            conn.execute('UPDATE applications SET status = ? WHERE company = ? AND role = ?', (status, sender, subject))
-        else:
-            # Add new application
-            conn.execute('INSERT INTO applications (company, role, job_type, country, source, date_applied, resume_version, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', (sender, subject, 'Unknown', 'Unknown', 'Email', datetime.now().strftime('%Y-%m-%d'), subject, status))
-
-        conn.commit()
-        conn.close()
-
-        return {
-            'subject': subject,
-            'date': email.get('date'),
-            'sender': sender,
-            'body': body,
-            'processed_date': datetime.now().isoformat()
-        }
+    def dump_email_for_debugging(self, email_data, folder="email_dumps"):
+        """Save email content to file for debugging purposes"""
+        try:
+            # Create dump folder if it doesn't exist
+            if not os.path.exists(folder):
+                os.makedirs(folder)
+            
+            # Generate filename based on subject and date
+            safe_subject = re.sub(r'[^\w\-_]', '_', email_data['subject'])[:50]
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{folder}/{timestamp}_{safe_subject}.txt"
+            
+            # Write email content to file
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write(f"SUBJECT: {email_data['subject']}\n")
+                f.write(f"FROM: {email_data['sender']}\n")
+                f.write(f"DATE: {email_data['date']}\n")
+                f.write(f"ID: {email_data['id']}\n")
+                f.write("\n---- BODY ----\n\n")
+                f.write(email_data['body'])
+            
+            logger.info(f"Dumped email content to {filename}")
+            return filename
+        except Exception as e:
+            logger.error(f"Error dumping email: {str(e)}")
+            return None

@@ -107,108 +107,16 @@
             background-color: #f44336;
             color: white;
         }
-        .email-toggle {
-            display: flex;
-            align-items: center;
-            margin-top: 10px;
-        }
-        .email-toggle label {
-            margin-left: 10px;
-            font-weight: normal;
-        }
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 60px;
-            height: 34px;
-        }
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #ccc;
-            transition: .4s;
-            border-radius: 34px;
-        }
-        .slider:before {
-            position: absolute;
-            content: "";
-            height: 26px;
-            width: 26px;
-            left: 4px;
-            bottom: 4px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
-        }
-        input:checked + .slider {
-            background-color: #4CAF50;
-        }
-        input:checked + .slider:before {
-            transform: translateX(26px);
-        }
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        .nav-links {
-            display: flex;
-            gap: 20px;
-        }
-        .nav-link {
-            text-decoration: none;
-            color: #2196F3;
-            font-weight: bold;
-        }
-        .nav-link:hover {
-            text-decoration: underline;
-        }
     </style>
 </head>
 <body>
     <div class="settings-container">
-        <div class="header">
-            <h1>Application Tracker Settings</h1>
-            <div class="nav-links">
-                <a href="/guide" class="nav-link">User Guide</a>
-                <a href="/" class="nav-link">Back to Applications</a>
-            </div>
-        </div>
+        <h1>Application Tracker Settings</h1>
         
         <div class="form-group">
-            <label for="email">Primary Email Address</label>
+            <label for="email">Monitored Email Address</label>
             <input type="email" id="email" class="form-control" value="{{ email }}">
-            <div class="email-toggle">
-                <label class="toggle-switch">
-                    <input type="checkbox" id="primary-email-toggle" {% if primary_email_enabled %}checked{% endif %}>
-                    <span class="slider"></span>
-                </label>
-                <label for="primary-email-toggle">Enable scanning for this email</label>
-            </div>
-            <small>This is the main email used to scan for job applications</small>
-        </div>
-        
-        <div class="form-group">
-            <label for="additional-email">Additional Email Address</label>
-            <input type="email" id="additional-email" class="form-control" value="{{ additional_email }}">
-            <div class="email-toggle">
-                <label class="toggle-switch">
-                    <input type="checkbox" id="additional-email-toggle" {% if additional_email_enabled %}checked{% endif %}>
-                    <span class="slider"></span>
-                </label>
-                <label for="additional-email-toggle">Enable scanning for this email</label>
-            </div>
-            <small>Optional secondary email to scan for job applications</small>
+            <small>This email will be used to scan for job applications and receive notifications</small>
         </div>
         
         <div class="action-row">
@@ -264,69 +172,33 @@
     
     <script>
         document.getElementById('save-btn').addEventListener('click', function() {
-            const primaryEmail = document.getElementById('email').value.trim();
-            const additionalEmail = document.getElementById('additional-email').value.trim();
-            const primaryEnabled = document.getElementById('primary-email-toggle').checked;
-            const additionalEnabled = document.getElementById('additional-email-toggle').checked;
+            const email = document.getElementById('email').value.trim();
             
-            if (!primaryEmail || !primaryEmail.includes('@')) {
-                showMessage('Please enter a valid primary email address', 'error');
+            if (!email || !email.includes('@')) {
+                showMessage('Please enter a valid email address', 'error');
                 return;
             }
             
-            // First update primary email
-            updateEmailSettings(primaryEmail, 'primary', primaryEnabled)
-                .then(() => {
-                    // Then update additional email if it exists
-                    if (additionalEmail && additionalEmail.includes('@')) {
-                        return updateEmailSettings(additionalEmail, 'additional', additionalEnabled);
-                    } else if (additionalEnabled) {
-                        showMessage('Please enter a valid additional email address or disable it', 'error');
-                        throw new Error('Invalid additional email');
-                    }
-                    return updateEmailSettings(null, 'additional', additionalEnabled);
-                })
-                .then(result => {
-                    if (result && result.success) {
-                        showMessage('Email settings updated successfully', 'success');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                });
-        });
-        
-        function updateEmailSettings(email, type, enabled) {
-            const data = {
-                type: type,
-                enabled: enabled
-            };
-            
-            if (email) {
-                data.email = email;
-            }
-            
-            return fetch('/settings/email', {
+            fetch('/settings/email', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(data)
+                body: JSON.stringify({ email: email })
             })
             .then(response => response.json())
             .then(data => {
-                if (!data.success) {
-                    showMessage(data.error || `Failed to update ${type} email settings`, 'error');
-                    throw new Error(data.error || `Failed to update ${type} email settings`);
+                if (data.success) {
+                    showMessage('Email updated successfully', 'success');
+                } else {
+                    showMessage(data.error || 'Failed to update email', 'error');
                 }
-                return data;
             })
             .catch(error => {
-                showMessage(`An error occurred updating ${type} email settings`, 'error');
+                showMessage('An error occurred', 'error');
                 console.error('Error:', error);
-                throw error;
             });
-        }
+        });
         
         document.getElementById('scan-btn').addEventListener('click', function() {
             showMessage('Scanning emails... This may take a moment.', 'success');

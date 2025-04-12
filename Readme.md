@@ -1,8 +1,37 @@
 # Job Applications Tracker
 
-## Section 1: Current Features
-
 An intelligent application tracking system with automated email monitoring capabilities.
+
+## Project Structure
+
+The project has been refactored to follow a more modular and maintainable structure:
+
+```
+app/
+├── __init__.py           # Package initialization
+├── config.py             # Configuration settings
+├── agents/               # Agent modules
+│   ├── __init__.py
+│   ├── classifier_agent.py
+│   ├── database_agent.py
+│   ├── email_monitor.py
+│   └── notification_agent.py
+├── database/             # Database operations
+│   ├── __init__.py
+│   └── db_manager.py
+├── services/             # External services
+│   ├── __init__.py
+│   └── gmail_service.py
+├── utils/                # Utility functions
+│   ├── __init__.py
+│   └── logger.py
+└── web/                  # Web application
+    ├── __init__.py
+    ├── app.py
+    └── routes.py
+```
+
+## Features
 
 ### Core Features
 - Add and manage job applications
@@ -12,57 +41,85 @@ An intelligent application tracking system with automated email monitoring capab
 - Color-coded status tracking
 - Responsive design
 
-### Installation
+### Intelligent Agent System
+- **Email Monitor Agent**: Monitors inbox for job-related emails
+- **Classifier Agent**: Analyzes email content and extracts relevant information
+- **Database Agent**: Manages data persistence and updates application records
+- **Notification Agent**: Sends real-time alerts and status summaries
+
+## Installation
+
+### Prerequisites
+- **Python 3.9+**
+- **Pip**
+
+### Steps
 
 1. **Clone the repository**
-```bash
-git clone https://github.com/yourusername/ApplicationTracker.git
-cd ApplicationTracker
-```
+    ```bash
+    git clone https://github.com/yourusername/ApplicationTracker.git
+    cd ApplicationTracker
+    ```
 
 2. **Create a virtual environment**
-```bash
-python -m venv venv
-.\venv\Scripts\activate
-```
+    ```bash
+    python -m venv venv
+    .\venv\Scripts\activate
+    ```
 
 3. **Install dependencies**
-```bash
-pip install -r requirements.txt
-```
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-4. **Initialize the database**
-```bash
-python MainFlow.py
-```
+4. **Set Up Google Console**
+    - Go to the Google Cloud Console → Create a project → Enable the Gmail API.
+    - Download your OAuth credentials and save them as `credentials.json` in the project root.
+    - Make sure you have redirect URIs set to http://localhost:8090 or similar.
 
-5. **Access the application**
-- Open http://localhost:5000 in your browser
+5. **Initialize the database**
+    ```bash
+    python run.py
+    ```
 
-### Current Usage
+6. **Access the application**
+    - Open http://localhost:8080 in your browser
 
-#### Application Management
-- Add new applications
-- Update status manually
-- Search and filter applications
-- Export data to CSV
-- Delete applications & Edit existing applications
+## Usage
 
-#### Status Tracking
-- Pending (Grey)
-- Interview (Green)
-- Assignment (Blue)
-- Rejected (Red)
-- Offer (Bold Green)
+### Home Screen
+- Displays recent applications in a table.
+- Shows whether OCR/Gmail scanning is connected.
 
----
+### Add / Edit Applications
+- Use the “Add” button or “Edit” option to update existing entries.
 
-## Section 2: Intelligent Agent System (In Development)
+### Manual Scanning
+- Click “Scan Now” if you want an immediate Gmail scan.
+- Check “Scan Status” to see if scanning is in progress.
 
-> **Note:** This feature is currently under active development and will be released in the coming weeks. The following section describes the planned functionality and architecture.
+### Automated Scanning
+- A background scheduler checks new emails hourly by default (configurable in code).
+
+### Email Notifications (Optional)
+- If you want to re-enable them, generate a Google App Password and update `.env`.
+- Uncomment the lines in `scan_and_update_applications` that send the notification emails.
+
+### Summary Emails
+- Daily summary at 10:00 AM by default (configured in the scheduler).
+- Uses GPT-based summarization; keep your OpenAI API key in `.env`.
+
+## Troubleshooting
+
+- **OAuth Error**: Ensure `credentials.json` is valid and redirect URIs match.
+- **ModuleNotFoundError**: Check `PYTHONPATH` or install missing packages with `pip`.
+- **Database Errors**: Delete `job_applications.db` if schema changes are needed, then rerun.
+- **SMTP Auth Failures**: Generate a Google App Password (if using Gmail) and update `.env`.
+
+## Intelligent Agent System
 
 ### Multi-Agent Architecture
-Our upcoming intelligent system will utilize multiple specialized agents to automate the job application tracking process:
+The application uses a multi-agent architecture to automate the job application tracking process:
 
 #### 1. Email Monitor Agent
 - Continuously monitors inbox
@@ -88,39 +145,15 @@ Our upcoming intelligent system will utilize multiple specialized agents to auto
 - Handles email notifications
 - Provides status summaries
 
-### Technical Implementation
-
-#### Planned Dependencies
-```txt
-aiohttp==3.8.1
-asyncio==3.4.3
-google-api-python-client==2.86.0
-nltk==3.8.1
-scikit-learn==1.2.2
-flask-mail==0.9.1
-```
-
-### Development Timeline
-- Phase 1: Email monitoring setup (DONE)
-- Phase 2: Classification system (2 weeks)
-- Phase 3: Database integration (1 week)
-- Phase 4: Notification system (1 week)
-- Phase 5: Testing and optimization (2 weeks)
-
-### Benefits of Agent System (Upcoming)
-1. **Parallel Processing**
-   - Multiple applications tracked simultaneously
-   - Non-blocking operations
-   - Improved performance
-
-2. **Modular Design**
+### Benefits of the Agent System
+1. **Modular Design**
    - Independent agent functionality
    - Easy maintenance
    - Simple testing
    - Scalable architecture
 
-3. **Intelligent Processing**
-   - Machine learning integration
+2. **Intelligent Processing**
+   - AI-based classification
    - Pattern recognition
    - Adaptive behavior
    - Improved accuracy over time

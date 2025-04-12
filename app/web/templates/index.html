@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Job Applications Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Job Applications Tracker</h1>
+            <a href="/settings" class="nav-link">Settings</a>
+        </header>
+        
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div id="connection-dot" class="connection-dot {{ 'connected' if is_authenticated else 'disconnected' }}" title="Connection Status"></div>
+                <div class="status-info">
+                    <div id="status-message" class="status-text">
+                        {{ 'Connected to Gmail: ' + monitored_email if is_authenticated else 'Not connected to Gmail' }}
+                    </div>
+                    <div class="status-details">
+                        <span id="agent-status">{{ 'All agents active' if is_authenticated else 'Agents inactive' }}</span>
+                        •
+                        <span id="last-scan">Last scan: {{ last_scan_time or 'Never' }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="status-actions">
+                <!-- Add scan status display -->
+                <div id="scan-status-container">
+                    <span id="scan-status" class="status-text"></span>
+                </div>
+                <button id="scan-now-btn" class="status-btn scan-btn" {{ 'disabled' if not is_authenticated }}>
+                    <span id="scan-spinner" class="spinner" style="display: none;"></span>
+                    <span id="scan-text">Scan Now</span>
+                </button>
+                <a href="/settings" class="status-btn settings-btn">Settings</a>
+            </div>
+        </div>
+
+        <section class="application-form-section">
+            <h2 class="section-title">Add New Application</h2>
+            <form id="application-form">
+                <div class="form-group">
+                    <label for="company">Company Name:</label>
+                    <input type="text" id="company" name="company" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="role">Role Applied For:</label>
+                    <select id="role" name="role" required>
+                        <option value="QA Eng">QA Eng</option>
+                        <option value="QA Automation Eng">QA Automation Eng</option>
+                        <option value="Software Dev">Software Dev</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="job_type">Job Type:</label>
+                    <select id="job_type" name="job_type" required>
+                        <option value="Remote">Remote</option>
+                        <option value="Hybrid">Hybrid</option>
+                        <option value="On-site">On-site</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="country">Country:</label>
+                    <input type="text" id="country" name="country" required>
+                </div>
+
+                <div class="form-group date-group">
+                    <label for="date_applied">Date Applied:</label>
+                    <div class="date-wrapper">
+                        <input type="date" id="date_applied" name="date_applied" required>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="today"> Today
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="source">Where Applied From:</label>
+                    <select id="source" name="source" required>
+                        <option value="LinkedIn">LinkedIn</option>
+                        <option value="Website">Website</option>
+                        <option value="Referral">Referral</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="submit-btn">Add Application</button>
+            </form>
+        </section>
+
+        <section class="applications-list-section">
+            <h2 class="section-title">Applications List</h2>
+            
+            <!-- Search by company -->
+            <div class="search-wrapper">
+                <input type="text" id="search" placeholder="Search by Company or Role">
+            </div>
+            
+            <!-- SINGLE FILTER SECTION -->
+            <div class="filter-section">
+                <div class="filter-header">
+                    <h3>Filter Applications</h3>
+                    <button id="toggle-filters" class="toggle-btn">Show Filters</button>
+                </div>
+                
+                <div id="filter-options" class="filter-options" style="display: none;">
+                    <div class="filter-row">
+                        <div class="filter-group">
+                            <label for="filter-status">Status</label>
+                            <select id="filter-status" class="filter-input">
+                                <option value="">All Statuses</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Interview">Interview</option>
+                                <option value="Assignment">Assignment</option>
+                                <option value="Offer">Offer</option>
+                                <option value="Rejected">Rejected</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="status-date-from">Status Date</label>
+                            <div class="date-range">
+                                <input type="date" id="status-date-from" class="filter-input date-input" placeholder="From">
+                                <span>to</span>
+                                <input type="date" id="status-date-to" class="filter-input date-input" placeholder="To">
+                            </div>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="applied-date-from">Applied Date</label>
+                            <div class="date-range">
+                                <input type="date" id="applied-date-from" class="filter-input date-input" placeholder="From">
+                                <span>to</span>
+                                <input type="date" id="applied-date-to" class="filter-input date-input" placeholder="To">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-row">
+                        <div class="filter-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="filter-new-only"> 
+                                New Applications Only (last 7 days)
+                            </label>
+                        </div>
+                        
+                        <div class="filter-group checkbox-group">
+                            <label>
+                                <input type="checkbox" id="filter-recent-updates"> 
+                                Recently Updated (last 7 days)
+                            </label>
+                        </div>
+                        
+                        <div class="filter-group">
+                            <label for="filter-sort-by">Sort By</label>
+                            <select id="filter-sort-by" class="filter-input">
+                                <option value="status_date">Status Date</option>
+                                <option value="date_applied">Application Date</option>
+                                <option value="company">Company</option>
+                                <option value="status">Status</option>
+                            </select>
+                            <select id="filter-sort-dir" class="filter-input">
+                                <option value="DESC">Newest First</option>
+                                <option value="ASC">Oldest First</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="filter-actions">
+                        <button id="apply-filters" class="action-btn">Apply Filters</button>
+                        <button id="reset-filters" class="action-btn secondary">Reset</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Applications table -->
+            <div class="table-wrapper">
+                <table class="applications" id="applications-table">
+                    <thead>
+                        <tr>
+                            <th>Company</th>
+                            <th>Role</th>
+                            <th>Job Type</th>
+                            <th>Country</th>
+                            <th>Date Applied</th>
+                            <th>Source</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for app in applications %}
+                        <tr class="status-{{ app['status'].lower() }}">
+                            <td>{{ app['company'] }}</td>
+                            <td>{{ app['role'] }}</td>
+                            <td>{{ app['job_type'] }}</td>
+                            <td>{{ app['country'] }}</td>
+                            <td>{{ app['date_applied'] }}</td>
+                            <td>{{ app['source'] }}</td>
+                            <td>
+                                <select class="status-select" data-company="{{ app['company'] }}" data-role="{{ app['role'] }}">
+                                    <option value="Pending" {% if app['status'] == 'Pending' %}selected{% endif %}>Pending</option>
+                                    <option value="Rejected" {% if app['status'] == 'Rejected' %}selected{% endif %}>Rejected</option>
+                                    <option value="Interview" {% if app['status'] == 'Interview' %}selected{% endif %}>Interview</option>
+                                    <option value="Assignment" {% if app['status'] == 'Assignment' %}selected{% endif %}>Assignment</option>
+                                    <option value="Offer" {% if app['status'] == 'Offer' %}selected{% endif %}>Offer</option>
+                                </select>
+                            </td>
+                            <td class="actions-cell">
+                                <button class="action-btn btn-warning edit-btn" 
+                                    data-company="{{ app['company'] }}" 
+                                    data-role="{{ app['role'] }}"
+                                    data-job-type="{{ app['job_type'] }}"
+                                    data-country="{{ app['country'] }}"
+                                    data-date="{{ app['date_applied'] }}"
+                                    data-source="{{ app['source'] }}">Edit</button>
+                                <button class="action-btn btn-danger delete-btn" 
+                                    data-company="{{ app['company'] }}" 
+                                    data-role="{{ app['role'] }}">Delete</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <button id="export-btn">Export to CSV</button>
+        </section>
+        
+        <div class="edit-modal" id="editModal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>Edit Application</h2>
+                <form id="edit-form">
+                    <!-- Hidden fields to store original values -->
+                    <input type="hidden" id="edit-original-company">
+                    <input type="hidden" id="edit-original-role">
+
+                    <div class="form-group">
+                        <label for="edit-company">Company Name:</label>
+                        <input type="text" id="edit-company" name="company" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="edit-role">Role Applied For:</label>
+                        <select id="edit-role" name="role" required>
+                            <option value="QA Eng">QA Eng</option>
+                            <option value="QA Automation Eng">QA Automation Eng</option>
+                            <option value="Software Dev">Software Dev</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="edit-job_type">Job Type:</label>
+                        <select id="edit-job_type" name="job_type" required>
+                            <option value="Remote">Remote</option>
+                            <option value="Hybrid">Hybrid</option>
+                            <option value="On-site">On-site</option>
+                        </select>
+                    </div>
+        
+                    <div class="form-group">
+                        <label for="edit-country">Country:</label>
+                        <input type="text" id="edit-country" name="country" required>
+                    </div>
+        
+                    <div class="form-group">
+                        <label for="edit-date_applied">Date Applied:</label>
+                        <input type="date" id="edit-date_applied" name="date_applied" required>
+                    </div>
+        
+                    <div class="form-group">
+                        <label for="edit-source">Source:</label>
+                        <select id="edit-source" name="source" required>
+                            <option value="LinkedIn">LinkedIn</option>
+                            <option value="Website">Website</option>
+                            <option value="Referral">Referral</option>
+                        </select>
+                    </div>
+        
+                    <button type="submit" class="submit-btn">Save Changes</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/scan.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/filters.js') }}"></script>
+</body>
+</html>
