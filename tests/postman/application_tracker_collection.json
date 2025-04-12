@@ -1,0 +1,64 @@
+{
+  "info": {
+    "name": "Application Tracker API Tests",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Collection of tests for the Application Tracker API"
+  },
+  "item": [
+    {
+      "name": "Get All Applications",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:8080/api/applications",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "applications"]
+        },
+        "description": "Retrieve all applications from the database"
+      },
+      "response": []
+    },
+    {
+      "name": "Create Application",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "http://localhost:8080/api/applications",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "applications"]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"company\": \"Test Company\",\n    \"role\": \"Test Role\",\n    \"date_applied\": \"2025-04-12\",\n    \"status\": \"applied\",\n    \"notes\": \"Test notes\"\n}"
+        },
+        "description": "Create a new application"
+      },
+      "response": []
+    },
+    {
+      "name": "Get Application by ID",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:8080/api/applications/1",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "8080",
+          "path": ["api", "applications", "1"]
+        },
+        "description": "Retrieve a specific application by ID"
+      },
+      "response": []
+    }
+  ]
+}
