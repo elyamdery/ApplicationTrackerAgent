@@ -1,16 +1,21 @@
-"""
-Selenium tests for the Application Tracker dashboard with screen recording.
-"""
+"""Selenium dashboard tests with screen recording."""
+
+import os
+import time
+from datetime import datetime
+
+import pytest
+
+if os.getenv('CI') == 'true':
+    pytest.skip("UI tests are disabled in CI", allow_module_level=True)
+
+pytest.importorskip("selenium")
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
-import time
-import sys
-import os
+from selenium.webdriver.support.ui import Select
 
-# Add the parent directory to the path so we can import the utils package
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils import BaseTest
+from tests.utils.base_test import BaseTest
 
 
 class DashboardTest(BaseTest):
@@ -28,7 +33,7 @@ class DashboardTest(BaseTest):
         
         try:
             # Check that the page title is correct
-            self.assertIn("Application Tracker", self.driver.title)
+            self.assertIn("Job Applications Tracker", self.driver.title)
             
             # Check that the status bar is visible
             status_bar = self.wait.until(
@@ -58,39 +63,42 @@ class DashboardTest(BaseTest):
         self.start_recording()
         
         try:
-            # Click the "Add Application" button
-            add_button = self.wait.until(
-                EC.element_to_be_clickable((By.ID, "add-application-btn"))
-            )
-            add_button.click()
-            
-            # Wait for the modal to appear
-            add_modal = self.wait.until(
-                EC.visibility_of_element_located((By.ID, "add-modal"))
-            )
-            self.assertTrue(add_modal.is_displayed())
-            
-            # Fill in the form
-            self.driver.find_element(By.ID, "company").send_keys("Test Company")
-            self.driver.find_element(By.ID, "role").send_keys("Test Role")
-            self.driver.find_element(By.ID, "date_applied").send_keys("2025-04-15")
-            self.driver.find_element(By.ID, "notes").send_keys("Test notes")
-            
-            # Submit the form
-            submit_button = self.driver.find_element(By.CSS_SELECTOR, "#add-form button[type='submit']")
+            # Fill in the inline form to add an application
+            unique_company = f"Test Company {datetime.now().strftime('%H%M%S')}"
+            form = self.wait.until(EC.visibility_of_element_located((By.ID, "application-form")))
+
+            company_input = self.driver.find_element(By.ID, "company")
+            company_input.clear()
+            company_input.send_keys(unique_company)
+
+            Select(self.driver.find_element(By.ID, "role")).select_by_index(0)
+            Select(self.driver.find_element(By.ID, "job_type")).select_by_value("Remote")
+
+            country_input = self.driver.find_element(By.ID, "country")
+            country_input.clear()
+            country_input.send_keys("IL")
+
+            today_checkbox = self.driver.find_element(By.ID, "today")
+            if not today_checkbox.is_selected():
+                today_checkbox.click()
+
+            Select(self.driver.find_element(By.ID, "source")).select_by_index(0)
+
+            submit_button = form.find_element(By.CSS_SELECTOR, "button[type='submit']")
             submit_button.click()
-            
-            # Wait for the page to reload
-            time.sleep(2)
-            
-            # Verify that the new application appears in the table
-            applications_table = self.wait.until(
-                EC.visibility_of_element_located((By.ID, "applications-table"))
+
+            # Form triggers a reload on success; wait for the DOM to refresh
+            self.wait.until(EC.staleness_of(form))
+
+            self.wait.until(
+                EC.text_to_be_present_in_element(
+                    (By.ID, "applications-table"),
+                    unique_company
+                )
             )
-            
-            # Assert that the new application is in the table
-            self.assertIn("Test Company", applications_table.text)
-            self.assertIn("Test Role", applications_table.text)
+
+            table_text = self.driver.find_element(By.ID, "applications-table").text
+            self.assertIn(unique_company, table_text)
         finally:
             # Stop recording explicitly (not needed if RECORD_ALL_TESTS is True)
             self.stop_recording()

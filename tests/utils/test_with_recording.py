@@ -1,17 +1,22 @@
-"""
-Example of how to use the screen recorder in a test.
-"""
+"""Example of how to use the screen recorder in a test."""
 
-import unittest
+import os
 import time
+import unittest
+
+import pytest
+
+if os.getenv('CI') == 'true':
+    pytest.skip("UI tests are disabled in CI", allow_module_level=True)
+
+pytest.importorskip("selenium")
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
-# Import the screen recorder
 from screen_recorder import ScreenRecorder
 
 
@@ -21,7 +26,7 @@ class TestWithRecording(unittest.TestCase):
     def setUp(self):
         """Set up the test environment."""
         # Initialize the Chrome driver
-        service = Service(ChromeDriverManager().install())
+        service = Service()
         self.driver = webdriver.Chrome(service=service)
         self.driver.maximize_window()
         

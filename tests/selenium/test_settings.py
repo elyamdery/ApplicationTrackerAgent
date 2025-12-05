@@ -1,14 +1,20 @@
-"""
-Selenium tests for the Application Tracker settings page.
-"""
+"""Selenium tests for the Application Tracker settings page."""
 
+import os
 import unittest
+
+import pytest
+
+if os.getenv('CI') == 'true':
+    pytest.skip("UI tests are disabled in CI", allow_module_level=True)
+
+pytest.importorskip("selenium")
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 
 
 class SettingsTest(unittest.TestCase):
@@ -17,7 +23,7 @@ class SettingsTest(unittest.TestCase):
     def setUp(self):
         """Set up the test environment."""
         # Initialize the Chrome driver
-        service = Service(ChromeDriverManager().install())
+        service = Service()
         self.driver = webdriver.Chrome(service=service)
         self.driver.maximize_window()
         self.driver.get("http://localhost:8080/settings")

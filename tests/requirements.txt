@@ -1,8 +1,5 @@
-selenium==4.10.0
-webdriver-manager==3.8.6
-pytest==7.3.1
-pytest-html==3.2.0
-requests==2.30.0
-opencv-python==4.7.0.72
-pyautogui==0.9.53
-numpy==1.24.3
+selenium==4.25.0
+pytest-html==4.1.1
+opencv-python==4.10.0.84
+pyautogui==0.9.54
+numpy==2.1.3

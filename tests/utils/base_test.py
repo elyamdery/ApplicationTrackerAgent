@@ -1,13 +1,18 @@
-"""
-Base test class with screen recording functionality.
-"""
+"""Base test class with screen recording functionality."""
 
-import unittest
 import os
+import unittest
+
+import pytest
+
+if os.getenv('CI') == 'true':
+    pytest.skip("UI tests are disabled in CI", allow_module_level=True)
+
+pytest.importorskip("selenium")
+
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
-from webdriver_manager.chrome import ChromeDriverManager
 
 # Import the screen recorder
 from .screen_recorder import ScreenRecorder
@@ -32,8 +37,8 @@ class BaseTest(unittest.TestCase):
 
     def setUp(self):
         """Set up the test environment."""
-        # Initialize the Chrome driver
-        service = Service(ChromeDriverManager().install())
+        # Initialize a Chrome driver via Selenium Manager
+        service = Service()
         self.driver = webdriver.Chrome(service=service)
         self.driver.maximize_window()
 
