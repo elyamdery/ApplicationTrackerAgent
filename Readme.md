@@ -77,9 +77,9 @@ app/
     - Download your OAuth credentials and save them as `credentials.json` in the project root.
     - Make sure you have redirect URIs set to http://localhost:8090 or similar.
 
-5. **Initialize the database**
+5. **Initialize the database & launch the app**
     ```bash
-    python run.py
+    python MainFlow.py
     ```
 
 6. **Access the application**
