@@ -21,8 +21,8 @@ if not logger.handlers:
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
-# Import directly from MainFlow instead of utils
-from MainFlow import get_db_connection
+# Import shared DB helper
+from utils.db_utils import get_db_connection
 
 class EmailMonitorAgent:
     """Agent responsible for monitoring and processing emails."""

@@ -12,9 +12,11 @@ import sqlite3
 import csv
 import logging
 import pickle
+import json
 from apscheduler.schedulers.background import BackgroundScheduler
 import openai
 from datetime import datetime, timedelta
+from collections import Counter
 import atexit  # Add this import
 from agents.email_monitor import EmailMonitorAgent
 from services.gmail_service import GmailService
@@ -26,11 +28,11 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from utils.db_utils import get_db_connection, init_db
 import webbrowser
 from urllib.parse import urlparse, parse_qs
 import secrets  # Add this import
 from flask.sessions import SecureCookieSessionInterface
-import asyncio  # Make sure this is also imported
 
 # Add this near the top of your file, after imports
 import os
@@ -84,6 +86,18 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
 app.session_interface = SecureCookieSessionInterface()
 
+# Scan window defaults
+DEFAULT_SCAN_WINDOW_DAYS = 7
+WINDOW_PRESET_MAP = {
+    'daily': 1,
+    'weekly': 7
+}
+MAX_SCAN_LOG_RETURN = 100
+
+JOB_TYPE_OVERRIDES = {
+    'workiz': 'Hybrid'
+}
+
 # Add these variables at the top level of your file
 scan_status = {
     'is_scanning': False,
@@ -91,8 +105,97 @@ scan_status = {
     'end_time': None,
     'status': 'idle',  # idle, scanning, completed, error
     'result': None,
-    'error': None
+    'error': None,
+    'window_days': DEFAULT_SCAN_WINDOW_DAYS,
+    'updates': []
 }
+
+
+def _get_setting_value(key, default=None):
+    """Lookup a setting value from the DB."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT value FROM settings WHERE key = ?", (key,))
+        row = cursor.fetchone()
+        return row['value'] if row else default
+    except Exception as exc:
+        logger.error(f"Error reading setting {key}: {exc}")
+        return default
+    finally:
+        if conn:
+            conn.close()
+
+
+def _set_setting_value(key, value):
+    """Persist a setting value to the DB."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
+        conn.commit()
+    except Exception as exc:
+        logger.error(f"Error writing setting {key}: {exc}")
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_scan_window_days():
+    """Return the configured scan lookback window in days."""
+    value = _get_setting_value('scan_window_days', DEFAULT_SCAN_WINDOW_DAYS)
+    try:
+        days = int(value)
+        return days if days > 0 else DEFAULT_SCAN_WINDOW_DAYS
+    except (TypeError, ValueError):
+        return DEFAULT_SCAN_WINDOW_DAYS
+
+
+def _window_label_to_days(label):
+    """Map UI-friendly labels to integer day windows."""
+    if not label:
+        return None
+    return WINDOW_PRESET_MAP.get(label.lower())
+
+
+def _days_to_window_label(days):
+    """Convert stored day values into the UI label."""
+    try:
+        return 'daily' if int(days) <= 1 else 'weekly'
+    except (TypeError, ValueError):
+        return 'weekly'
+
+
+def record_scan_log(email_data, outcome, reason=None, metadata=None, company=None, role=None, status=None):
+    """Persist a single scan decision for later inspection."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        conn.execute(
+            """
+            INSERT INTO scan_logs
+                (email_id, subject, sender, company, role, status_value, outcome, reason, metadata, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                email_data.get('id'),
+                email_data.get('subject'),
+                email_data.get('sender'),
+                company,
+                role,
+                status,
+                outcome,
+                reason,
+                json.dumps(metadata or {}),
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            )
+        )
+        conn.commit()
+    except Exception as exc:
+        logger.error(f"Failed to record scan log: {exc}")
+    finally:
+        if conn:
+            conn.close()
 
 # Function to load credentials
 def load_credentials():
@@ -114,62 +217,9 @@ notification_agent = NotificationAgent(
     password=email_password
 )
 
-# Update your init_db function
-def init_db():
-    try:
-        conn = sqlite3.connect('job_applications.db')
-        # Existing applications table creation
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS applications (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                company TEXT NOT NULL,
-                role TEXT NOT NULL,
-                job_type TEXT NOT NULL,
-                country TEXT NOT NULL,
-                source TEXT NOT NULL,
-                date_applied TEXT NOT NULL,
-                resume_version TEXT NOT NULL,
-                status TEXT NOT NULL,
-                status_date TEXT
-            );
-        ''')
-        
-        # Check if status_date column exists, add if it doesn't
-        cursor = conn.execute("PRAGMA table_info(applications)")
-        columns = [column[1] for column in cursor.fetchall()]
-        if 'status_date' not in columns:
-            # Add column without default value first
-            conn.execute("ALTER TABLE applications ADD COLUMN status_date TEXT")
-            # Then update existing rows
-            conn.execute("UPDATE applications SET status_date = date_applied")
-            logger.info("Added status_date column to applications table")
-        
-        # Add settings table
-        conn.execute('''
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            );
-        ''')
-        
-        # Set default email if it doesn't exist
-        cursor = conn.execute("SELECT value FROM settings WHERE key = 'monitored_email'")
-        if not cursor.fetchone():
-            conn.execute("INSERT INTO settings (key, value) VALUES (?, ?)", 
-                        ('monitored_email', 'elyam.work@gmail.com'))
-        
-        conn.commit()
-    except Exception as e:
-        logger.error(f"Database initialization error: {str(e)}")
-        raise
-    finally:
-        conn.close()
+SKIP_EMAIL_DUMPS = os.getenv('SKIP_EMAIL_DUMPS', '').lower() in ('1', 'true', 'yes')
 
-# Function to get DB connection
-def get_db_connection():
-    conn = sqlite3.connect('job_applications.db')
-    conn.row_factory = sqlite3.Row
-    return conn
+## DB helpers now imported from utils.db_utils
 
 @app.route('/')
 def index():
@@ -210,18 +260,99 @@ def index():
         cursor = conn.execute("SELECT value FROM settings WHERE key = 'last_scan_time'")
         row = cursor.fetchone()
         last_scan_time = row['value'] if row else None
+
+        cursor = conn.execute("SELECT value FROM settings WHERE key = 'scan_window_days'")
+        row = cursor.fetchone()
+        try:
+            scan_window_days = int(row['value']) if row else DEFAULT_SCAN_WINDOW_DAYS
+        except (TypeError, ValueError):
+            scan_window_days = DEFAULT_SCAN_WINDOW_DAYS
+        scan_window = _days_to_window_label(scan_window_days)
         
         # Get applications
         applications = conn.execute('SELECT * FROM applications ORDER BY id DESC').fetchall()
+
+        status_counter = Counter()
+        seven_days_ago = datetime.now() - timedelta(days=7)
+        new_this_week = 0
+        recent_updates = 0
+
+        for app in applications:
+            status_counter[app['status']] += 1
+            applied_date = _safe_parse_date(app['date_applied'])
+            status_date_value = _safe_parse_date(app['status_date'])
+
+            if applied_date and applied_date >= seven_days_ago:
+                new_this_week += 1
+            if status_date_value and status_date_value >= seven_days_ago:
+                recent_updates += 1
+
+        summary = {
+            'total': len(applications),
+            'new_this_week': new_this_week,
+            'recent_updates': recent_updates,
+            'offers': status_counter.get('Offer', 0)
+        }
         
-        return render_template('index.html', 
+        return render_template('dashboard.html', 
                               applications=applications,
                               is_authenticated=is_authenticated,
                               monitored_email=monitored_email,
-                              last_scan_time=last_scan_time)
+                              last_scan_time=last_scan_time,
+                              scan_window=scan_window,
+                              summary=summary,
+                              status_counter=status_counter)
     except Exception as e:
         logger.error(f"Error loading index: {str(e)}")
         return jsonify({'error': 'Failed to load applications'}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route('/guide')
+def guide():
+    """Render the in-app user manual page."""
+    conn = None
+    try:
+        token_path = 'token.pickle'
+        is_authenticated = False
+
+        if os.path.exists(token_path):
+            try:
+                with open(token_path, 'rb') as token:
+                    creds = pickle.load(token)
+                is_authenticated = creds and creds.valid
+
+                if not is_authenticated and hasattr(creds, 'refresh_token'):
+                    try:
+                        creds.refresh(Request())
+                        with open(token_path, 'wb') as token:
+                            pickle.dump(creds, token)
+                        is_authenticated = True
+                    except Exception as refresh_error:
+                        logger.error(f"Error refreshing token for guide page: {str(refresh_error)}")
+            except Exception as cred_error:
+                logger.error(f"Error checking credentials for guide page: {str(cred_error)}")
+
+        conn = get_db_connection()
+        cursor = conn.execute("SELECT value FROM settings WHERE key = 'monitored_email'")
+        row = cursor.fetchone()
+        guide_monitored_email = row['value'] if row else monitored_email
+
+        cursor = conn.execute("SELECT value FROM settings WHERE key = 'last_scan_time'")
+        row = cursor.fetchone()
+        last_scan_time = row['value'] if row else None
+
+        return render_template(
+            'new_guide.html',
+            is_authenticated=is_authenticated,
+            monitored_email=guide_monitored_email,
+            last_scan_time=last_scan_time
+        )
+    except Exception as exc:
+        logger.error(f"Error loading guide page: {str(exc)}")
+        return render_template('error.html', error='Failed to load user guide'), 500
     finally:
         if conn:
             conn.close()
@@ -434,6 +565,7 @@ def get_gmail_service():
         return None
 
 @app.route('/add', methods=['POST'])
+@app.route('/add_application', methods=['POST'])
 def add_application():
     try:
         data = request.get_json()
@@ -475,6 +607,7 @@ def add_application():
         conn.close()
 
 @app.route('/delete', methods=['POST'])
+@app.route('/delete_application', methods=['POST'])
 def delete_application():
     try:
         data = request.get_json()
@@ -496,6 +629,7 @@ def delete_application():
         conn.close()
 
 @app.route('/export')
+@app.route('/export_csv')
 def export_to_csv():
     try:
         conn = get_db_connection()
@@ -568,6 +702,7 @@ def update_status():
             conn.close()
 
 @app.route('/edit', methods=['POST'])
+@app.route('/edit_application', methods=['POST'])
 def edit_application():
     try:
         data = request.get_json()
@@ -604,56 +739,134 @@ def edit_application():
         if 'conn' in locals():
             conn.close()
 
+
+@app.route('/filter_applications', methods=['POST'])
+def filter_applications():
+    """Filter applications by various criteria"""
+    try:
+        data = request.get_json()
+        logger.debug(f"Filter request data: {data}")
+
+        query = "SELECT * FROM applications WHERE 1=1"
+        params = []
+
+        if data.get('status'):
+            query += " AND status = ?"
+            params.append(data['status'])
+
+        if data.get('date_from'):
+            query += " AND status_date >= ?"
+            params.append(data['date_from'])
+
+        if data.get('date_to'):
+            query += " AND status_date <= ?"
+            params.append(data['date_to'])
+
+        if data.get('applied_from'):
+            query += " AND date_applied >= ?"
+            params.append(data['applied_from'])
+
+        if data.get('applied_to'):
+            query += " AND date_applied <= ?"
+            params.append(data['applied_to'])
+
+        if data.get('new_only'):
+            seven_days_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+            query += " AND date_applied >= ?"
+            params.append(seven_days_ago)
+
+        if data.get('recently_updated'):
+            seven_days_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+            query += " AND status_date >= ?"
+            params.append(seven_days_ago)
+
+        sort_field = data.get('sort_by', 'id')
+        sort_dir = data.get('sort_dir', 'DESC')
+        allowed_fields = ['id', 'company', 'role', 'status', 'date_applied', 'status_date']
+        allowed_dirs = ['ASC', 'DESC']
+
+        if sort_field in allowed_fields and sort_dir in allowed_dirs:
+            query += f" ORDER BY {sort_field} {sort_dir}"
+        else:
+            query += " ORDER BY id DESC"
+
+        conn = get_db_connection()
+        cursor = conn.execute(query, params)
+        applications = cursor.fetchall()
+
+        result = [dict(app) for app in applications]
+
+        return jsonify({
+            'success': True,
+            'filtered_count': len(result),
+            'applications': result
+        })
+
+    except Exception as e:
+        logger.error(f"Error filtering applications: {str(e)}")
+        return jsonify({'error': 'Failed to filter applications'}), 500
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
+
+
+@app.route('/get_application')
+def get_application():
+    """Get application details for editing"""
+    try:
+        company = request.args.get('company')
+        role = request.args.get('role')
+
+        if not company or not role:
+            return jsonify({'error': 'Company and role are required'}), 400
+
+        conn = get_db_connection()
+        cursor = conn.execute(
+            "SELECT * FROM applications WHERE company = ? AND role = ?",
+            (company, role)
+        )
+        application = cursor.fetchone()
+
+        if not application:
+            return jsonify({'error': 'Application not found'}), 404
+
+        app_dict = dict(application)
+
+        return jsonify({
+            'success': True,
+            'application': app_dict
+        })
+
+    except Exception as e:
+        logger.error(f"Error getting application: {str(e)}")
+        return jsonify({'error': 'Failed to get application'}), 500
+    finally:
+        if 'conn' in locals() and conn:
+            conn.close()
+
 # Function to scan emails and update applications
-async def scan_and_update_applications(target_email=None):
-    """Scan emails and update application database"""
+def scan_and_update_applications(target_email=None):
+    """Scan emails using the unified processing pipeline."""
     try:
         logger.info("Starting scan_and_update_applications function")
-        
-        # If no target email provided, get from settings
+
+        # Determine which email to scan
         if not target_email:
-            conn = get_db_connection()
-            cursor = conn.execute("SELECT value FROM settings WHERE key = 'monitored_email'")
-            row = cursor.fetchone()
-            target_email = row['value'] if row else monitored_email
-            conn.close()
-        
-        logger.info(f"Scanning emails for {target_email}")
-        
-        # Initialize agents if needed
-        global gmail_service, email_monitor_agent
-        if 'gmail_service' not in globals() or not gmail_service:
-            gmail_service = get_gmail_service()
-            email_monitor_agent = EmailMonitorAgent(gmail_service=gmail_service)
-        
-        # Scan emails
-        emails = await email_monitor_agent.scan_emails(
-            lookback_days=7, 
-            target_email=target_email
-        )
-        
-        logger.info(f"Found {len(emails)} relevant emails")
-        
-        # Process each email
-        for email in emails:
-            logger.info(f"Processing email with subject: {email['subject']}")
-            # Classify email
-            classification = classifier_agent.classify_email(email)
-            email.update(classification)
+            target_email = _get_setting_value('monitored_email', monitored_email)
 
-            # Update or add application in the database
-            database_agent.update_application(email)
+        if not target_email:
+            logger.warning("No monitored email configured; aborting scan")
+            return 0
 
-            # DISABLE EMAIL NOTIFICATIONS - causes auth errors
-            # notification_agent.send_email(
-            #     to_address=target_email,
-            #     subject=f"Application Update: {email['subject']}",
-            #     body=f"Status: {email['status']}\n\n{email['body']}"
-            # )
-            
-        return len(emails)  # Return number of processed emails
+        lookback_days = get_scan_window_days()
+        logger.info(f"Scanning emails for {target_email} with {lookback_days}-day window")
+
+        result = scan_emails_and_process(target_email, lookback_days=lookback_days)
+        logger.info(f"Scheduled scan result: {result}")
+        return result
     except Exception as e:
         logger.error(f"Error scanning and updating applications: {str(e)}")
+        logger.exception("Scheduled scan failure")
         return 0
 
 # Function to send summary email
@@ -691,14 +904,12 @@ def send_summary_email():
         if conn:
             conn.close()
 
-import asyncio
-
 # Initialize scheduler in a function that can be conditionally called
 def init_scheduler():
     scheduler = BackgroundScheduler()
     
     # Add jobs to scheduler
-    scheduler.add_job(lambda: asyncio.run(scan_and_update_applications()), 'interval', hours=1)
+    scheduler.add_job(scan_and_update_applications, 'interval', hours=1)
     scheduler.add_job(send_summary_email, 'cron', hour=10, minute=0)
     
     # Start the scheduler
@@ -817,12 +1028,46 @@ def update_email():
         if 'conn' in locals():
             conn.close()
 
+
+@app.route('/settings/scan_window', methods=['POST'])
+def update_scan_window():
+    """Persist the preferred scan lookback window."""
+    global scan_status
+    try:
+        data = request.get_json(force=True)
+        window = data.get('window', '').lower()
+
+        if window not in WINDOW_PRESET_MAP:
+            return jsonify({'error': 'Invalid window option'}), 400
+
+        days = WINDOW_PRESET_MAP[window]
+        _set_setting_value('scan_window_days', days)
+        scan_status['window_days'] = days
+
+        return jsonify({'success': True, 'window': window, 'days': days})
+    except Exception as e:
+        logger.error(f"Error updating scan window: {str(e)}")
+        return jsonify({'error': 'Failed to update scan window'}), 500
+
 @app.route('/scan_now')
 def scan_now():
     """Manually trigger email scanning"""
     global scan_status  # Move global declaration to the top of the function
     
     try:
+        requested_window = request.args.get('window', '').lower()
+        requested_days = request.args.get('lookback_days')
+        lookback_days = None
+
+        if requested_days:
+            try:
+                lookback_days = max(1, int(requested_days))
+            except ValueError:
+                lookback_days = None
+
+        if lookback_days is None:
+            lookback_days = _window_label_to_days(requested_window) or get_scan_window_days()
+
         # Check authentication
         token_path = 'token.pickle'
         if not os.path.exists(token_path):
@@ -832,7 +1077,7 @@ def scan_now():
         conn = get_db_connection()
         cursor = conn.execute("SELECT value FROM settings WHERE key = 'monitored_email'")
         row = cursor.fetchone()
-        monitored_email = row['value'] if row else monitored_email
+        target_email = row['value'] if row else monitored_email
         
         # Update last scan time
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -855,7 +1100,9 @@ def scan_now():
             'end_time': None,
             'status': 'scanning',
             'result': None,
-            'error': None
+            'error': None,
+            'window_days': lookback_days,
+            'updates': []
         }
         
         # Run scan in a background thread with timeout protection
@@ -863,7 +1110,7 @@ def scan_now():
             global scan_status  # Need global here too
             try:
                 # Use a direct sync function instead of asyncio for more reliable behavior
-                result = scan_emails_and_process(monitored_email, service)
+                result = scan_emails_and_process(target_email, service, lookback_days=lookback_days)
                 
                 # Update status with result
                 scan_status['end_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -887,8 +1134,9 @@ def scan_now():
         
         return jsonify({
             'success': True, 
-            'message': f'Scanning emails for {monitored_email}',
-            'last_scan_time': now
+            'message': f'Scanning emails for {target_email}',
+            'last_scan_time': now,
+            'window_days': lookback_days
         })
     except Exception as e:
         logger.error(f"Error triggering scan: {str(e)}")
@@ -914,11 +1162,66 @@ def get_scan_status():
             'end_time': scan_status['end_time'],
             'result': scan_status['result'],
             'error': scan_status['error'],
-            'last_scan_time': last_scan_time
+            'last_scan_time': last_scan_time,
+            'window_days': scan_status.get('window_days', get_scan_window_days()),
+            'updates': scan_status.get('updates', [])
         })
     except Exception as e:
         logger.error(f"Error getting scan status: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/scan_logs')
+def scan_logs_endpoint():
+    """Return the latest scan log entries for UI inspection."""
+    conn = None
+    try:
+        limit_arg = request.args.get('limit', 15)
+        try:
+            limit = int(limit_arg)
+        except (TypeError, ValueError):
+            limit = 15
+        limit = max(1, min(limit, MAX_SCAN_LOG_RETURN))
+
+        conn = get_db_connection()
+        rows = conn.execute(
+            """
+            SELECT email_id, subject, sender, company, role, status_value, outcome, reason, metadata, created_at
+            FROM scan_logs
+            ORDER BY datetime(created_at) DESC
+            LIMIT ?
+            """,
+            (limit,)
+        ).fetchall()
+
+        logs = []
+        for row in rows:
+            metadata = {}
+            if row['metadata']:
+                try:
+                    metadata = json.loads(row['metadata'])
+                except json.JSONDecodeError:
+                    metadata = {}
+            logs.append({
+                'email_id': row['email_id'],
+                'subject': row['subject'],
+                'sender': row['sender'],
+                'company': row['company'],
+                'role': row['role'],
+                'status': row['status_value'],
+                'outcome': row['outcome'],
+                'reason': row['reason'],
+                'metadata': metadata,
+                'created_at': row['created_at']
+            })
+
+        return jsonify({'logs': logs, 'limit': limit})
+    except Exception as e:
+        logger.error(f"Error fetching scan logs: {str(e)}")
+        return jsonify({'error': 'Failed to load scan logs'}), 500
+    finally:
+        if conn:
+            conn.close()
 
 @app.route('/authenticate')
 def authenticate():
@@ -1118,19 +1421,58 @@ def determine_email_status(email_data):
     logger.info("No status patterns found, defaulting to Pending")
     return "Pending"
 
-def classify_email_content(email_data, monitored_email):
-    """Determine if email contains job application info with STRICT criteria"""
+
+def infer_job_type(email_data, company_name=None):
+    """Infer job type (Remote/Hybrid/On-site) using keyword heuristics and overrides."""
+    if company_name and company_name.lower() in JOB_TYPE_OVERRIDES:
+        return JOB_TYPE_OVERRIDES[company_name.lower()]
+
+    text = f"{email_data.get('subject', '')} {email_data.get('body', '')}".lower()
+    hybrid_terms = ['hybrid', 'onsite/remote', 'on-site/remote', 'mix of remote', 'split schedule', 'partly remote']
+    remote_terms = ['remote', 'work from home', 'wfh', 'fully remote', 'distributed team']
+    onsite_terms = ['on-site', 'onsite', 'in office', 'in-office', 'office-based', 'on site']
+
+    def _contains_any(terms):
+        return any(term in text for term in terms)
+
+    if _contains_any(hybrid_terms):
+        return 'Hybrid'
+    if _contains_any(remote_terms):
+        return 'Remote'
+    if _contains_any(onsite_terms):
+        return 'On-site'
+
+    return 'Remote'
+
+
+def _safe_parse_date(value):
+    """Parse YYYY-MM-DD strings without raising."""
+    if not value:
+        return None
     try:
-        # Dump email for debugging
-        dump_email_for_debugging(email_data)
+        return datetime.strptime(value, '%Y-%m-%d')
+    except Exception:
+        return None
+
+def classify_email_content(email_data, monitored_email):
+    """Determine if email contains job application info while exposing debug metadata."""
+    debug_info = {
+        'reason': None,
+        'signal': None,
+        'pattern': None,
+        'company_candidate': None
+    }
+    try:
+        if not SKIP_EMAIL_DUMPS:
+            dump_email_for_debugging(email_data)
         
-        subject = email_data.get('subject', '').lower()
-        body = email_data.get('body', '').lower()
-        combined_text = subject + ' ' + body
+        raw_subject = email_data.get('subject', '')
+        raw_body = email_data.get('body', '')
+        normalized_subject = raw_subject.lower()
+        normalized_body = raw_body.lower()
+        combined_text = normalized_subject + ' ' + normalized_body
         
-        # REQUIRE STRICT CONFIRMATION PATTERNS - must have these specific phrases
-        job_application_confirmations = [
-            # Very explicit application confirmations
+        strict_patterns = [
             r'thank\s+you\s+for\s+(?:your|submitting|completing)\s+(?:application|applying)',
             r'(?:your|the)\s+application\s+(?:has\s+been|was)\s+(?:received|submitted|confirmed)',
             r'we\s+(?:have|\'ve)\s+received\s+your\s+application',
@@ -1141,70 +1483,91 @@ def classify_email_content(email_data, monitored_email):
             r'in\s+response\s+to\s+your\s+(?:recent|job)\s+application',
             r'thank\s+you\s+for\s+expressing\s+interest\s+in\s+(?:the|this|our)\s+(?:position|role|vacancy)'
         ]
+
+        fallback_patterns = [
+            r'your\s+application\s+(?:to|for)',
+            r'we\s+noticed\s+your\s+application',
+            r'has\s+received\s+your\s+application',
+            r'we\s+are\s+reviewing\s+your\s+application',
+            r'update\s+on\s+your\s+application',
+            r'consideration\s+for\s+the\s+position',
+            r'next\s+steps\s+in\s+the\s+process',
+            r'invitation\s+to\s+(?:a\s+)?(?:phone|video)?\s*interview',
+            r'spark\s+hire',
+            r'phone\s+interview',
+            r'let\'s\s+have\s+a\s+chat'
+        ]
+
+        matching_pattern = next((pattern for pattern in strict_patterns if re.search(pattern, combined_text, re.IGNORECASE)), None)
+        signal_strength = 'strict'
+
+        if not matching_pattern:
+            matching_pattern = next((pattern for pattern in fallback_patterns if re.search(pattern, combined_text, re.IGNORECASE)), None)
+            if matching_pattern:
+                signal_strength = 'fallback'
+
+        if not matching_pattern:
+            primary_keywords = ['application', 'apply', 'applied', 'candidate', 'position', 'role', 'interview', 'offer']
+            context_keywords = ['received', 'review', 'consideration', 'process', 'thank you', 'interest', 'invitation', 'schedule']
+            keyword_hits = sum(1 for kw in primary_keywords if kw in combined_text)
+            context_hits = sum(1 for kw in context_keywords if kw in combined_text)
+            if keyword_hits >= 2 and context_hits >= 1:
+                matching_pattern = 'keyword-signal'
+                signal_strength = 'keywords'
+            else:
+                debug_info['reason'] = 'no_application_pattern'
+                logger.info(f"Email does not match job application heuristics: {raw_subject}")
+                return None, debug_info
+
+        logger.info(f"Found job application confirmation pattern ({signal_strength}): {matching_pattern}")
+        debug_info.update({'signal': signal_strength, 'pattern': matching_pattern})
         
-        # Check if ANY of the strict patterns match
-        is_job_application = False
-        matching_pattern = None
-        
-        for pattern in job_application_confirmations:
-            if re.search(pattern, combined_text, re.IGNORECASE):
-                is_job_application = True
-                matching_pattern = pattern
-                break
-                
-        # If no strict pattern matched, this is NOT a job application
-        if not is_job_application:
-            logger.info(f"Email does not match any strict job application patterns: {subject}")
-            return None
-            
-        logger.info(f"Found job application confirmation pattern: {matching_pattern}")
-        
-        # Extract company name with better filtering
         company_name = extract_company_name(email_data)
+        debug_info['company_candidate'] = company_name
         if not company_name:
-            logger.info(f"Could not extract company name from confirmed job application: {subject}")
-            return None
+            debug_info['reason'] = 'company_not_found'
+            logger.info(f"Could not extract company name from confirmed job application: {raw_subject}")
+            return None, debug_info
             
-        # Validate company name is not an invalid value
         invalid_companies = ['linkedin', 'update', 'alert', 'notification', 'message', 
                            'tel aviv', 'new york', 'reminder', 'news']
         if any(inv.lower() in company_name.lower() for inv in invalid_companies):
+            debug_info['reason'] = 'invalid_company_name'
             logger.info(f"Skipping invalid company name: {company_name}")
-            return None
+            return None, debug_info
             
-        # Company name must be at least 3 chars and not be a single letter
         if len(company_name) < 3:
+            debug_info['reason'] = 'company_name_short'
             logger.info(f"Company name too short: {company_name}")
-            return None
+            return None, debug_info
         
-        # Extract role with fallback
         role = extract_role(email_data) or "Position"
-        
-        # Determine status
         status = determine_email_status(email_data)
         
-        # Create application data
         app_data = {
             'company': company_name,
             'role': role,
             'status': status,
             'email_id': email_data['id'],
             'email_date': email_data['date'],
-            'job_type': 'Remote',
+            'job_type': infer_job_type(email_data, company_name),
             'country': 'Unknown',
             'source': 'Email',
             'date_applied': parse_date(email_data['date'])
         }
         
+        debug_info['reason'] = 'classified'
         logger.info(f"Classified email as {status} for {company_name}, role: {role}")
-        return app_data
+        return app_data, debug_info
         
     except Exception as e:
+        debug_info['reason'] = 'exception'
+        debug_info['error'] = str(e)
         logger.error(f"Error classifying email: {str(e)}")
         logger.exception("Classification error details:")
-        return None
+        return None, debug_info
 
-def scan_emails_and_process(monitored_email, service=None):
+def scan_emails_and_process(monitored_email, service=None, lookback_days=None):
     """Process emails and update application database"""
     try:
         logger.info(f"Starting email scan for {monitored_email}")
@@ -1218,7 +1581,8 @@ def scan_emails_and_process(monitored_email, service=None):
             return "failed: no service"
             
         # Search for relevant emails
-        emails = search_emails(service, monitored_email, days=30)
+        window_days = lookback_days or get_scan_window_days()
+        emails = search_emails(service, monitored_email, days=window_days)
         logger.info(f"Found {len(emails)} potentially relevant emails")
         
         if not emails:
@@ -1237,15 +1601,27 @@ def scan_emails_and_process(monitored_email, service=None):
                 msg_data = get_email_content(service, email['id'])
                 if not msg_data:
                     logger.debug(f"Could not get content for email {email['id']}")
+                    record_scan_log({'id': email['id'], 'subject': None, 'sender': None}, 'error', 'missing_email_body', {'window_days': window_days})
                     continue
                     
                 # Classify and extract application data
-                app_data = classify_email_content(msg_data, monitored_email)
+                app_data, debug_info = classify_email_content(msg_data, monitored_email)
                 if not app_data:
+                    record_scan_log(
+                        msg_data,
+                        'skipped',
+                        debug_info.get('reason'),
+                        {'classification': debug_info, 'window_days': window_days}
+                    )
                     continue
                     
                 # Update database with extracted info
                 result = update_application_database(app_data)
+                log_metadata = {
+                    'classification': debug_info,
+                    'db_result': result,
+                    'window_days': window_days
+                }
                 if result['result'] == 'new':
                     new_count += 1
                     updated_applications.append({
@@ -1266,10 +1642,26 @@ def scan_emails_and_process(monitored_email, service=None):
                     })
                 elif result['result'] == 'error':
                     errors += 1
+
+                record_scan_log(
+                    msg_data,
+                    result['result'],
+                    result.get('message'),
+                    log_metadata,
+                    company=app_data['company'],
+                    role=app_data['role'],
+                    status=app_data['status']
+                )
             except Exception as e:
                 errors += 1
                 logger.error(f"Error processing email {email['id']}: {str(e)}")
                 logger.exception("Processing error details:")
+                record_scan_log(
+                    {'id': email['id'], 'subject': None, 'sender': None},
+                    'error',
+                    str(e),
+                    {'window_days': window_days}
+                )
         
         result_message = f"Email scan complete. Added {new_count} new applications, updated {updated_count} existing applications, {errors} errors"
         logger.info(result_message)
@@ -1277,6 +1669,7 @@ def scan_emails_and_process(monitored_email, service=None):
         # Store updated applications in scan_status for UI display
         global scan_status
         scan_status['updates'] = updated_applications
+        scan_status['window_days'] = window_days
         
         return f"completed: {new_count} new, {updated_count} updated"
             
@@ -1292,13 +1685,28 @@ def search_emails(service, email_address, days=30):
         today = datetime.now()
         start_date = (today - timedelta(days=days)).strftime('%Y/%m/%d')
         
-        # Very specific search query with application-focused terms
+        keyword_terms = [
+            '"thank you for applying"',
+            '"thank you for your application"',
+            '"application received"',
+            '"we received your application"',
+            '"your application"',
+            '"application review"',
+            '"next steps"',
+            '"job offer"',
+            '"interview"',
+            '"assignment"',
+            'application',
+            'applied',
+            'candidate'
+        ]
+        keyword_query = ' OR '.join(keyword_terms)
+        
+        # Broader search query that still avoids noisy sources
         query = (
-            f"(to:{email_address} OR from:{email_address}) "
+            f"(to:{email_address} OR cc:{email_address}) "
             f"after:{start_date} "
-            f"(\"thank you for applying\" OR \"application received\" OR "
-            f"\"your application\" OR \"job application\" OR \"position application\" OR "
-            f"\"we have received your application\" OR \"confirmation of your application\") "
+            f"({keyword_query}) "
             f"-from:linkedin -from:notifications@linkedin"
         )
         
@@ -1308,7 +1716,7 @@ def search_emails(service, email_address, days=30):
         results = service.users().messages().list(
             userId='me',
             q=query,
-            maxResults=100
+            maxResults=200
         ).execute()
         
         messages = results.get('messages', [])
@@ -1382,7 +1790,7 @@ def update_application_database(app_data):
         # Validate application data
         if not app_data.get('company') or len(app_data['company']) < 3:
             logger.warning(f"Invalid company name: {app_data['company']}")
-            return {'result': 'invalid', 'date': None}
+            return {'result': 'invalid', 'date': None, 'message': 'invalid_company'}
             
         # Skip common false positives
         skip_companies = [
@@ -1392,7 +1800,7 @@ def update_application_database(app_data):
         
         if app_data['company'].lower() in skip_companies:
             logger.warning(f"Skipping known false positive company: {app_data['company']}")
-            return {'result': 'skipped', 'date': None}
+            return {'result': 'skipped', 'date': None, 'message': 'false_positive_company'}
         
         # Current date for status updates
         today = datetime.now().strftime('%Y-%m-%d')
@@ -1419,10 +1827,10 @@ def update_application_database(app_data):
                 ))
                 conn.commit()
                 logger.info(f"Updated application status: {app_data['company']} - {app_data['role']} from {existing['status']} to {app_data['status']}")
-                return {'result': 'updated', 'date': today}
+                return {'result': 'updated', 'date': today, 'message': 'status_updated'}
             else:
                 logger.info(f"Application already exists with same status: {app_data['company']} - {app_data['role']} ({app_data['status']})")
-                return {'result': 'existing', 'date': existing['status_date']}
+                return {'result': 'existing', 'date': existing['status_date'], 'message': 'status_unchanged'}
         else:
             # Insert new application with today's date for status_date
             conn.execute("""
@@ -1444,12 +1852,12 @@ def update_application_database(app_data):
             ))
             conn.commit()
             logger.info(f"Added new application: {app_data['company']} - {app_data['role']} with status {app_data['status']}")
-            return {'result': 'new', 'date': today}
+            return {'result': 'new', 'date': today, 'message': 'inserted'}
             
     except Exception as e:
         logger.error(f"Error updating application database: {str(e)}")
         logger.exception("Database update error details:")
-        return {'result': 'error', 'date': None}
+        return {'result': 'error', 'date': None, 'message': str(e)}
     finally:
         if conn:
             conn.close()
@@ -1483,14 +1891,75 @@ def extract_company_name(email_data):
         # Technical terms
         'smtp', 'email', 'mail', 'server', 'account'
     ]
+
+    def _normalize_company(candidate):
+        if not candidate:
+            return None
+        cleaned = re.sub(r'[\|,;]+$', '', candidate).strip()
+        cleaned = re.sub(r'^[\s\-–—]+', '', cleaned)
+        cleaned = re.sub(r'\s+', ' ', cleaned)
+        cleaned = re.split(r'\s[\-–—]\s', cleaned, maxsplit=1)[0].strip()
+        cleaned = re.split(r'\b(?:is|has|will|remains|continues|under|about|regarding)\b', cleaned, maxsplit=1)[0].strip()
+        cleaned = re.sub(r'\b(?:role|position)\b.*$', '', cleaned, flags=re.IGNORECASE).strip()
+        if len(cleaned) < 3:
+            return None
+        lowered = cleaned.lower()
+        if any(term in lowered for term in non_company_terms):
+            return None
+        return cleaned
+
+    def _return_candidate(value, source):
+        company = _normalize_company(value)
+        if company:
+            logger.info(f"Extracted company from {source}: {company}")
+            return company
+        return None
+    
+    # Subject-based patterns like "Thank you for applying to COMPANY"
+    subject_patterns = [
+        r'(?:application|applying)\s+(?:to|with|at)\s+([A-Z][A-Za-z0-9&\'\- ]{1,50})',
+        r'for\s+the\s+[^,]+?\s+(?:position|role)\s+(?:at|with)\s+([A-Z][A-Za-z0-9&\'\- ]{1,50})'
+    ]
+    for pattern in subject_patterns:
+        match = re.search(pattern, subject, re.IGNORECASE)
+        if match:
+            company = _return_candidate(match.group(1), 'subject pattern')
+            if company:
+                return company
+    
+    # Handle "Company - Application Received" style subjects
+    if '-' in subject or '|' in subject or '–' in subject or '—' in subject:
+        for chunk in re.split(r'[-|–—]', subject):
+            if 'application' in chunk.lower():
+                possible = chunk.split(' for ')[-1].split(' to ')[-1]
+                company = _return_candidate(possible, 'subject chunk')
+                if company:
+                    return company
+
+    if '|' in subject:
+        for candidate in reversed([part.strip() for part in subject.split('|')]):
+            company = _return_candidate(candidate, 'subject pipe segment')
+            if company:
+                return company
+
+    if '/' in subject:
+        for candidate in reversed([part.strip() for part in subject.split('/')]):
+            company = _return_candidate(candidate, 'subject slash segment')
+            if company:
+                return company
+
+    combined_text = f"{subject} {body}"
+    role_company_pattern = re.search(r'(?:role|position)\s+(?:at|with)\s+([A-Z][A-Za-z0-9&\'\- ]{1,50})', combined_text, re.IGNORECASE)
+    if role_company_pattern:
+        company = _return_candidate(role_company_pattern.group(1), 'role reference')
+        if company:
+            return company
     
     # Pattern for company in "Thank you for applying to COMPANY" format
-    apply_pattern = re.search(r'thank\s+you\s+for\s+(?:your\s+)?(?:interest|application|applying)\s+(?:to|at|with)\s+([A-Z][A-Za-z0-9]+(?:\s+[A-Za-z0-9]+){0,2})', body, re.IGNORECASE)
+    apply_pattern = re.search(r'thank\s+you\s+for\s+(?:your\s+)?(?:interest|application|applying)\s+(?:to|at|with)\s+([A-Z][A-Za-z0-9&\'\- ]{1,50})', body, re.IGNORECASE)
     if apply_pattern:
-        company = apply_pattern.group(1).strip()
-        # Validate it's not in our filter list
-        if len(company) >= 3 and not any(term.lower() == company.lower() for term in non_company_terms):
-            logger.info(f"Extracted company from application pattern: {company}")
+        company = _return_candidate(apply_pattern.group(1), 'body confirmation')
+        if company:
             return company
     
     # Try from sender with name extraction
@@ -1506,9 +1975,8 @@ def extract_company_name(email_data):
         for pattern in company_patterns:
             match = re.search(pattern, sender_name)
             if match:
-                company = match.group(1).strip()
-                if len(company) >= 3 and not any(term.lower() == company.lower() for term in non_company_terms):
-                    logger.info(f"Extracted company from sender name: {company}")
+                company = _return_candidate(match.group(1), 'sender name')
+                if company:
                     return company
     
     # Last resort: try to extract domain from sender email
@@ -1523,9 +1991,8 @@ def extract_company_name(email_data):
                 parts = domain.split('.')
                 # Use first part if it seems like a company name
                 if len(parts[0]) >= 3:  # Avoid very short names
-                    company = parts[0].title()
-                    if not any(term.lower() == company.lower() for term in non_company_terms):
-                        logger.info(f"Extracted company from email domain: {company}")
+                    company = _return_candidate(parts[0].title(), 'email domain')
+                    if company:
                         return company
         except Exception as e:
             logger.error(f"Error extracting domain: {str(e)}")
@@ -1728,11 +2195,12 @@ if __name__ == '__main__':
                     continue
                     
                 # Try to classify
-                classification = classify_email_content(msg_data, 'test@example.com')
+                classification, debug_info = classify_email_content(msg_data, 'test@example.com')
                 
                 results.append({
                     'subject': msg_data['subject'],
                     'classification': classification,
+                    'debug': debug_info,
                     'is_job_related': bool(classification)
                 })
             
@@ -1772,17 +2240,26 @@ if __name__ == '__main__':
             monitored_email = row['value'] if row else monitored_email
             conn.close()
             
-            classification = classify_email_content(msg_data, monitored_email)
+            classification, debug_info = classify_email_content(msg_data, monitored_email)
             
-            # If classification succeeded, update database
             db_result = None
             if classification:
                 db_result = update_application_database(classification)
+                record_scan_log(
+                    msg_data,
+                    db_result['result'],
+                    db_result.get('message'),
+                    {'classification': debug_info, 'source': 'manual_classify'},
+                    company=classification['company'],
+                    role=classification['role'],
+                    status=classification['status']
+                )
             
             return jsonify({
                 'success': True,
                 'subject': msg_data['subject'],
                 'classification': classification,
+                'debug': debug_info,
                 'is_job_related': bool(classification),
                 'database_result': db_result
             })
@@ -1790,122 +2267,6 @@ if __name__ == '__main__':
             logger.error(f"Error in manual classification: {str(e)}")
             logger.exception("Stack trace:")
             return jsonify({'error': str(e)}), 500
-
-    @app.route('/filter_applications', methods=['POST'])
-    def filter_applications():
-        """Filter applications by various criteria"""
-        try:
-            data = request.get_json()
-            logger.debug(f"Filter request data: {data}")
-            
-            # Build the SQL query based on filter criteria
-            query = "SELECT * FROM applications WHERE 1=1"
-            params = []
-            
-            # Filter by status
-            if data.get('status'):
-                query += " AND status = ?"
-                params.append(data['status'])
-            
-            # Filter by date range (status_date)
-            if data.get('date_from'):
-                query += " AND status_date >= ?"
-                params.append(data['date_from'])
-                
-            if data.get('date_to'):
-                query += " AND status_date <= ?"
-                params.append(data['date_to'])
-                
-            # Filter by application date range
-            if data.get('applied_from'):
-                query += " AND date_applied >= ?"
-                params.append(data['applied_from'])
-                
-            if data.get('applied_to'):
-                query += " AND date_applied <= ?"
-                params.append(data['applied_to'])
-                
-            # Filter by new applications (last 7 days)
-            if data.get('new_only'):
-                seven_days_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-                query += " AND date_applied >= ?"
-                params.append(seven_days_ago)
-                
-            # Filter by recently updated (last 7 days)
-            if data.get('recently_updated'):
-                seven_days_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
-                query += " AND status_date >= ?"
-                params.append(seven_days_ago)
-                
-            # Add sorting
-            sort_field = data.get('sort_by', 'id')
-            sort_dir = data.get('sort_dir', 'DESC')
-            allowed_fields = ['id', 'company', 'role', 'status', 'date_applied', 'status_date']
-            allowed_dirs = ['ASC', 'DESC']
-            
-            if sort_field in allowed_fields and sort_dir in allowed_dirs:
-                query += f" ORDER BY {sort_field} {sort_dir}"
-            else:
-                query += " ORDER BY id DESC"  # Default sorting
-                
-            # Execute query
-            conn = get_db_connection()
-            cursor = conn.execute(query, params)
-            applications = cursor.fetchall()
-            
-            # Convert to list of dicts for JSON response
-            result = []
-            for app in applications:
-                app_dict = dict(app)
-                result.append(app_dict)
-                
-            return jsonify({
-                'success': True,
-                'filtered_count': len(result),
-                'applications': result
-            })
-        
-        except Exception as e:
-            logger.error(f"Error filtering applications: {str(e)}")
-            return jsonify({'error': 'Failed to filter applications'}), 500
-        finally:
-            if 'conn' in locals() and conn:
-                conn.close()
-    
-    @app.route('/get_application')
-    def get_application():
-        """Get application details for editing"""
-        try:
-            company = request.args.get('company')
-            role = request.args.get('role')
-            
-            if not company or not role:
-                return jsonify({'error': 'Company and role are required'}), 400
-            
-            conn = get_db_connection()
-            cursor = conn.execute(
-                "SELECT * FROM applications WHERE company = ? AND role = ?", 
-                (company, role)
-            )
-            application = cursor.fetchone()
-            
-            if not application:
-                return jsonify({'error': 'Application not found'}), 404
-            
-            # Convert to dict for JSON response
-            app_dict = dict(application)
-            
-            return jsonify({
-                'success': True,
-                'application': app_dict
-            })
-        
-        except Exception as e:
-            logger.error(f"Error getting application: {str(e)}")
-            return jsonify({'error': 'Failed to get application'}), 500
-        finally:
-            if 'conn' in locals() and conn:
-                conn.close()
 
     # Run the app in debug mode on port 8080
     app.run(host='localhost', port=8080, debug=True)

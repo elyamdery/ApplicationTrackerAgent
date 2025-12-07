@@ -1,3 +1,4 @@
+﻿# pip-requirements
 Flask==3.0.0                      # Web framework
 python-dotenv==1.0.0              # Environment variable management
 APScheduler==3.10.1               # For scheduling email checks

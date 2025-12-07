@@ -1,9 +1,16 @@
-"""
-Test for Screen Recorder Utility
-"""
+"""Test for Screen Recorder Utility."""
+
+import os
+import time
 
 import pytest
-from utils.screen_recorder import ScreenRecorder # type: ignore
+
+from utils.screen_recorder import ScreenRecorder  # type: ignore
+
+
+pytestmark = pytest.mark.skipif(
+    os.getenv('CI') == 'true', reason='Requires desktop capture not available in CI'
+)
 
 @pytest.mark.asyncio
 async def test_screen_recorder():
@@ -11,8 +18,6 @@ async def test_screen_recorder():
     recorder = ScreenRecorder(output_file='test_screen_recorder.avi')
     recorder.start_recording()
     try:
-        # Simulate some activity
-        import time
         time.sleep(5)  # Record for 5 seconds
     finally:
         recorder.stop_recording()

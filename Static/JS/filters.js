@@ -1,18 +1,20 @@
 document.addEventListener('DOMContentLoaded', function() {
-    console.log("Filter script loaded");
-    
-    // Filter toggle
     const toggleFiltersBtn = document.getElementById('toggle-filters');
     const filterOptions = document.getElementById('filter-options');
     
     if (toggleFiltersBtn && filterOptions) {
         toggleFiltersBtn.addEventListener('click', function() {
-            const isHidden = filterOptions.style.display === 'none';
-            filterOptions.style.display = isHidden ? 'block' : 'none';
-            toggleFiltersBtn.textContent = isHidden ? 'Hide Filters' : 'Show Filters';
+            const isHidden = filterOptions.hasAttribute('hidden');
+            if (isHidden) {
+                filterOptions.removeAttribute('hidden');
+                toggleFiltersBtn.textContent = 'Hide Filters';
+                toggleFiltersBtn.setAttribute('aria-expanded', 'true');
+            } else {
+                filterOptions.setAttribute('hidden', 'hidden');
+                toggleFiltersBtn.textContent = 'Show Filters';
+                toggleFiltersBtn.setAttribute('aria-expanded', 'false');
+            }
         });
-    } else {
-        console.error("Filter toggle elements not found");
     }
     
     // Apply filters

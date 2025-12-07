@@ -97,6 +97,8 @@ app/
 ### Manual Scanning
 - Click “Scan Now” if you want an immediate Gmail scan.
 - Check “Scan Status” to see if scanning is in progress.
+- Review the **Latest Run Summary** pills to see which companies or roles were created/updated during the last scan.
+- Use the **Automation Logs** list to inspect skip reasons or classifier decisions when debugging missed emails.
 
 ### Automated Scanning
 - A background scheduler checks new emails hourly by default (configurable in code).

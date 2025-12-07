@@ -1,11 +1,17 @@
-"""
-Tests for Email Monitor Agent functionality
-"""
+"""Tests for Email Monitor Agent functionality."""
+
+import os
+from datetime import datetime
 
 import pytest
-from datetime import datetime
+
 from agents.email_monitor import EmailMonitorAgent
-from utils.screen_recorder import ScreenRecorder # type: ignore
+from utils.screen_recorder import ScreenRecorder  # type: ignore
+
+
+pytestmark = pytest.mark.skipif(
+    os.getenv('CI') == 'true', reason='Requires desktop capture not available in CI'
+)
 
 @pytest.fixture
 def email_agent():
