@@ -1,0 +1,576 @@
+{% extends "layout.html" %}
+
+{% block title %}Application Tracker - Dashboard{% endblock %}
+
+{% block styles %}
+<style>
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1050;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.5);
+    }
+    
+    .modal-content {
+        position: relative;
+        background-color: white;
+        margin: 10% auto;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        width: 80%;
+        max-width: 600px;
+    }
+    
+    .close-btn {
+        position: absolute;
+        top: 10px;
+        right: 20px;
+        color: #6c757d;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+    
+    .close-btn:hover {
+        color: #212529;
+    }
+    
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        line-height: 1;
+        text-align: center;
+        white-space: nowrap;
+        vertical-align: baseline;
+        border-radius: 50rem;
+    }
+    
+    .status-badge.applied {
+        color: white;
+        background-color: var(--primary-color);
+    }
+    
+    .status-badge.interview {
+        color: white;
+        background-color: var(--secondary-color);
+    }
+    
+    .status-badge.offer {
+        color: white;
+        background-color: var(--success-color);
+    }
+    
+    .status-badge.rejected {
+        color: white;
+        background-color: var(--danger-color);
+    }
+    
+    .status-badge.withdrawn {
+        color: white;
+        background-color: var(--gray-600);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Status Bar -->
+<div class="status-bar">
+    <div class="status-indicator">
+        <div id="connection-dot" class="connection-dot {{ 'connected' if is_authenticated else 'disconnected' }}" title="Connection Status"></div>
+        <div class="status-info">
+            <div id="status-message" class="status-text">
+                {{ 'Connected to Gmail: ' + monitored_email if is_authenticated else 'Not connected to Gmail' }}
+            </div>
+            <div class="status-details">
+                <span id="agent-status">{{ 'All agents active' if is_authenticated else 'Agents inactive' }}</span>
+                •
+                <span id="last-scan">Last scan: {{ last_scan_time or 'Never' }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="status-actions">
+        <!-- Add scan status display -->
+        <div id="scan-status-container">
+            <span id="scan-status" class="status-text"></span>
+        </div>
+        <button id="scan-now-btn" class="btn btn-primary" {{ 'disabled' if not is_authenticated }}>
+            <span id="scan-spinner" class="spinner" style="display: none;"></span>
+            <span id="scan-text">Scan Now</span>
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Your Applications</h2>
+        <button id="add-application-btn" class="btn btn-primary">Add Application</button>
+    </div>
+    <div class="card-body">
+        {% if applications %}
+            <div class="filter-container mb-3">
+                <label for="status-filter">Filter by Status:</label>
+                <select id="status-filter" class="form-control">
+                    <option value="all">All</option>
+                    <option value="applied">Applied</option>
+                    <option value="interview">Interview</option>
+                    <option value="offer">Offer</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="withdrawn">Withdrawn</option>
+                </select>
+            </div>
+            
+            <table id="applications-table" class="table">
+                <thead>
+                    <tr>
+                        <th>Company</th>
+                        <th>Role</th>
+                        <th>Date Applied</th>
+                        <th>Status</th>
+                        <th>Notes</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for app in applications %}
+                    <tr data-id="{{ app['id'] }}" data-status="{{ app['status'] }}">
+                        <td>{{ app['company'] }}</td>
+                        <td>{{ app['role'] }}</td>
+                        <td>{{ app['date_applied'] }}</td>
+                        <td>
+                            <span class="status-badge {{ app['status'] }}">
+                                {{ app['status'].capitalize() }}
+                            </span>
+                        </td>
+                        <td>{{ app['notes'] }}</td>
+                        <td class="actions-cell">
+                            <button class="action-btn edit-btn" title="Edit">✏️</button>
+                            <button class="action-btn delete-btn" title="Delete">🗑️</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            <div class="mt-3">
+                <button id="export-csv-btn" class="btn btn-secondary">Export to CSV</button>
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <p>No applications found. Add your first application or scan your email.</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Application Modal -->
+<div id="add-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn">&times;</span>
+        <h2>Add New Application</h2>
+        <form id="add-form">
+            <div class="form-group">
+                <label for="company" class="form-label">Company Name:</label>
+                <input type="text" id="company" name="company" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="role" class="form-label">Role/Position:</label>
+                <input type="text" id="role" name="role" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="date_applied" class="form-label">Date Applied:</label>
+                <input type="date" id="date_applied" name="date_applied" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="status" class="form-label">Status:</label>
+                <select id="status" name="status" class="form-control" required>
+                    <option value="applied">Applied</option>
+                    <option value="interview">Interview</option>
+                    <option value="offer">Offer</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="withdrawn">Withdrawn</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="notes" class="form-label">Notes:</label>
+                <textarea id="notes" name="notes" rows="3" class="form-control"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Add Application</button>
+                <button type="button" class="btn btn-secondary" id="cancel-add">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Application Modal -->
+<div id="edit-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn">&times;</span>
+        <h2>Edit Application</h2>
+        <form id="edit-form">
+            <input type="hidden" id="edit-id" name="id">
+            <div class="form-group">
+                <label for="edit-company" class="form-label">Company Name:</label>
+                <input type="text" id="edit-company" name="company" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="edit-role" class="form-label">Role/Position:</label>
+                <input type="text" id="edit-role" name="role" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="edit-date" class="form-label">Date Applied:</label>
+                <input type="date" id="edit-date" name="date_applied" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="edit-status" class="form-label">Status:</label>
+                <select id="edit-status" name="status" class="form-control" required>
+                    <option value="applied">Applied</option>
+                    <option value="interview">Interview</option>
+                    <option value="offer">Offer</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="withdrawn">Withdrawn</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="edit-notes" class="form-label">Notes:</label>
+                <textarea id="edit-notes" name="notes" rows="3" class="form-control"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Save Changes</button>
+                <button type="button" class="btn btn-secondary" id="cancel-edit">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div id="delete-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn">&times;</span>
+        <h2>Confirm Deletion</h2>
+        <p>Are you sure you want to delete this application?</p>
+        <div class="form-actions">
+            <button id="confirm-delete" class="btn btn-danger">Delete</button>
+            <button id="cancel-delete" class="btn btn-secondary">Cancel</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add Application Modal
+        const addBtn = document.getElementById('add-application-btn');
+        const addModal = document.getElementById('add-modal');
+        const addForm = document.getElementById('add-form');
+        const cancelAdd = document.getElementById('cancel-add');
+        const closeAddBtn = addModal.querySelector('.close-btn');
+        
+        addBtn.addEventListener('click', function() {
+            addModal.style.display = 'block';
+            console.log('Add button clicked, modal should be visible');
+        });
+        
+        cancelAdd.addEventListener('click', function() {
+            addModal.style.display = 'none';
+        });
+        
+        closeAddBtn.addEventListener('click', function() {
+            addModal.style.display = 'none';
+        });
+        
+        // Form submission
+        addForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(addForm);
+            const application = {
+                company: formData.get('company'),
+                role: formData.get('role'),
+                date_applied: formData.get('date_applied'),
+                status: formData.get('status'),
+                notes: formData.get('notes')
+            };
+            
+            fetch('/api/applications', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(application)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Refresh the page to show the new application
+                    window.location.reload();
+                } else {
+                    alert('Error adding application: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while adding the application.');
+            });
+        });
+        
+        // Status filter
+        const statusFilter = document.getElementById('status-filter');
+        if (statusFilter) {
+            statusFilter.addEventListener('change', function() {
+                const status = this.value;
+                const rows = document.querySelectorAll('#applications-table tbody tr');
+                
+                rows.forEach(row => {
+                    if (status === 'all' || row.dataset.status === status) {
+                        row.style.display = '';
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+            });
+        }
+        
+        // Export to CSV
+        const exportBtn = document.getElementById('export-csv-btn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', function() {
+                window.location.href = '/export_csv';
+            });
+        }
+        
+        // Edit application
+        const editBtns = document.querySelectorAll('.edit-btn');
+        const editModal = document.getElementById('edit-modal');
+        const editForm = document.getElementById('edit-form');
+        const cancelEdit = document.getElementById('cancel-edit');
+        const closeEditBtn = editModal.querySelector('.close-btn');
+        
+        editBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const row = this.closest('tr');
+                const id = row.dataset.id;
+                
+                // Fetch application details
+                fetch(`/api/applications/${id}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const app = data.application;
+                            document.getElementById('edit-id').value = app.id;
+                            document.getElementById('edit-company').value = app.company;
+                            document.getElementById('edit-role').value = app.role;
+                            document.getElementById('edit-date').value = app.date_applied;
+                            document.getElementById('edit-status').value = app.status;
+                            document.getElementById('edit-notes').value = app.notes;
+                            
+                            editModal.style.display = 'block';
+                        } else {
+                            alert('Error fetching application details: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('An error occurred while fetching application details.');
+                    });
+            });
+        });
+        
+        editForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(editForm);
+            const id = formData.get('id');
+            const application = {
+                company: formData.get('company'),
+                role: formData.get('role'),
+                date_applied: formData.get('date_applied'),
+                status: formData.get('status'),
+                notes: formData.get('notes')
+            };
+            
+            fetch(`/api/applications/${id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(application)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Refresh the page to show the updated application
+                    window.location.reload();
+                } else {
+                    alert('Error updating application: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while updating the application.');
+            });
+        });
+        
+        if (cancelEdit) {
+            cancelEdit.addEventListener('click', function() {
+                editModal.style.display = 'none';
+            });
+        }
+        
+        if (closeEditBtn) {
+            closeEditBtn.addEventListener('click', function() {
+                editModal.style.display = 'none';
+            });
+        }
+        
+        // Delete application
+        const deleteBtns = document.querySelectorAll('.delete-btn');
+        const deleteModal = document.getElementById('delete-modal');
+        const confirmDelete = document.getElementById('confirm-delete');
+        const cancelDelete = document.getElementById('cancel-delete');
+        const closeDeleteBtn = deleteModal.querySelector('.close-btn');
+        let deleteId = null;
+        
+        deleteBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const row = this.closest('tr');
+                deleteId = row.dataset.id;
+                deleteModal.style.display = 'block';
+            });
+        });
+        
+        if (confirmDelete) {
+            confirmDelete.addEventListener('click', function() {
+                if (deleteId) {
+                    fetch(`/api/applications/${deleteId}`, {
+                        method: 'DELETE'
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Refresh the page to show the updated list
+                            window.location.reload();
+                        } else {
+                            alert('Error deleting application: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('An error occurred while deleting the application.');
+                    });
+                }
+            });
+        }
+        
+        if (cancelDelete) {
+            cancelDelete.addEventListener('click', function() {
+                deleteModal.style.display = 'none';
+                deleteId = null;
+            });
+        }
+        
+        if (closeDeleteBtn) {
+            closeDeleteBtn.addEventListener('click', function() {
+                deleteModal.style.display = 'none';
+                deleteId = null;
+            });
+        }
+        
+        // Scan Now button
+        const scanBtn = document.getElementById('scan-now-btn');
+        const scanSpinner = document.getElementById('scan-spinner');
+        const scanText = document.getElementById('scan-text');
+        const scanStatus = document.getElementById('scan-status');
+        
+        if (scanBtn) {
+            scanBtn.addEventListener('click', function() {
+                if (scanBtn.disabled) return;
+                
+                // Show spinner and update text
+                scanSpinner.style.display = 'inline-block';
+                scanText.textContent = 'Scanning...';
+                scanBtn.disabled = true;
+                scanStatus.textContent = 'Scanning emails...';
+                
+                fetch('/scan_now')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            scanStatus.textContent = data.message;
+                            
+                            // Poll for scan completion
+                            const pollInterval = setInterval(() => {
+                                fetch('/scan_status')
+                                    .then(response => response.json())
+                                    .then(statusData => {
+                                        if (statusData.status === 'completed') {
+                                            clearInterval(pollInterval);
+                                            scanSpinner.style.display = 'none';
+                                            scanText.textContent = 'Scan Now';
+                                            scanBtn.disabled = false;
+                                            
+                                            const result = statusData.result;
+                                            if (result) {
+                                                scanStatus.textContent = `Scan completed: ${result.processed} emails processed, ${result.new} new applications, ${result.updated} updated.`;
+                                                
+                                                // Refresh the page after a short delay
+                                                setTimeout(() => {
+                                                    window.location.reload();
+                                                }, 3000);
+                                            } else {
+                                                scanStatus.textContent = 'Scan completed.';
+                                            }
+                                        } else if (statusData.status === 'error') {
+                                            clearInterval(pollInterval);
+                                            scanSpinner.style.display = 'none';
+                                            scanText.textContent = 'Scan Now';
+                                            scanBtn.disabled = false;
+                                            scanStatus.textContent = `Error: ${statusData.error}`;
+                                        }
+                                    })
+                                    .catch(error => {
+                                        console.error('Error polling scan status:', error);
+                                    });
+                            }, 2000);
+                        } else {
+                            scanSpinner.style.display = 'none';
+                            scanText.textContent = 'Scan Now';
+                            scanBtn.disabled = false;
+                            scanStatus.textContent = `Error: ${data.error}`;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error starting scan:', error);
+                        scanSpinner.style.display = 'none';
+                        scanText.textContent = 'Scan Now';
+                        scanBtn.disabled = false;
+                        scanStatus.textContent = 'Error starting scan.';
+                    });
+            });
+        }
+        
+        // Close modals when clicking outside
+        window.addEventListener('click', function(event) {
+            if (event.target === addModal) {
+                addModal.style.display = 'none';
+            }
+            if (event.target === editModal) {
+                editModal.style.display = 'none';
+            }
+            if (event.target === deleteModal) {
+                deleteModal.style.display = 'none';
+                deleteId = null;
+            }
+        });
+    });
+</script>
+{% endblock %}

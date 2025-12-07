@@ -1,0 +1,191 @@
+{% extends "layout.html" %}
+
+{% block title %}Application Tracker - Dashboard{% endblock %}
+
+{% block styles %}
+<style>
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1050;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-content {
+        position: relative;
+        background-color: white;
+        margin: 10% auto;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        width: 80%;
+        max-width: 600px;
+    }
+
+    .close-btn {
+        position: absolute;
+        top: 10px;
+        right: 20px;
+        color: #6c757d;
+        font-size: 28px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .close-btn:hover {
+        color: #212529;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">Applications</h2>
+        <button id="add-application-btn" class="btn btn-primary">Add Application</button>
+    </div>
+    <div class="card-body">
+        {% if applications %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Company</th>
+                        <th>Role</th>
+                        <th>Date Applied</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for app in applications %}
+                    <tr>
+                        <td>{{ app['company'] }}</td>
+                        <td>{{ app['role'] }}</td>
+                        <td>{{ app['date_applied'] }}</td>
+                        <td>
+                            <span class="status-badge {{ app['status'] }}">
+                                {{ app['status'].capitalize() }}
+                            </span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No applications found.</p>
+            <a href="/add" class="btn btn-primary">Add Application</a>
+        {% endif %}
+    </div>
+</div>
+<!-- Add Application Modal -->
+<div id="add-modal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn">&times;</span>
+        <h2>Add New Application</h2>
+        <form id="add-form">
+            <div class="form-group">
+                <label for="company" class="form-label">Company Name:</label>
+                <input type="text" id="company" name="company" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="role" class="form-label">Role/Position:</label>
+                <input type="text" id="role" name="role" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="date_applied" class="form-label">Date Applied:</label>
+                <input type="date" id="date_applied" name="date_applied" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="status" class="form-label">Status:</label>
+                <select id="status" name="status" class="form-control" required>
+                    <option value="applied">Applied</option>
+                    <option value="interview">Interview</option>
+                    <option value="offer">Offer</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="withdrawn">Withdrawn</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="notes" class="form-label">Notes:</label>
+                <textarea id="notes" name="notes" rows="3" class="form-control"></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary">Add Application</button>
+                <button type="button" class="btn btn-secondary" id="cancel-add">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add Application Modal
+        const addBtn = document.getElementById('add-application-btn');
+        const addModal = document.getElementById('add-modal');
+        const addForm = document.getElementById('add-form');
+        const cancelAdd = document.getElementById('cancel-add');
+        const closeAddBtn = addModal.querySelector('.close-btn');
+
+        addBtn.addEventListener('click', function() {
+            addModal.style.display = 'block';
+            console.log('Add button clicked, modal should be visible');
+        });
+
+        cancelAdd.addEventListener('click', function() {
+            addModal.style.display = 'none';
+        });
+
+        closeAddBtn.addEventListener('click', function() {
+            addModal.style.display = 'none';
+        });
+
+        // Close modal when clicking outside
+        window.addEventListener('click', function(event) {
+            if (event.target === addModal) {
+                addModal.style.display = 'none';
+            }
+        });
+
+        // Form submission
+        addForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(addForm);
+            const application = {
+                company: formData.get('company'),
+                role: formData.get('role'),
+                date_applied: formData.get('date_applied'),
+                status: formData.get('status'),
+                notes: formData.get('notes')
+            };
+
+            fetch('/api/applications', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(application)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Refresh the page to show the new application
+                    window.location.reload();
+                } else {
+                    alert('Error adding application: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while adding the application.');
+            });
+        });
+    });
+</script>
+{% endblock %}

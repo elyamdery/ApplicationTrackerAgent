@@ -1,0 +1,77 @@
+repos\ApplicationTracker\templates\auth_status.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Authentication Status</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        h1 { color: #333; }
+        .status-card { 
+            border: 1px solid #ddd; 
+            border-radius: 5px; 
+            padding: 15px; 
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+        .status-item { margin-bottom: 10px; }
+        .label { font-weight: bold; display: inline-block; width: 180px; }
+        .value { display: inline-block; }
+        .true { color: green; }
+        .false { color: red; }
+        .button {
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-right: 10px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Authentication Status</h1>
+    
+    <div class="status-card">
+        <div class="status-item">
+            <span class="label">Token File Exists:</span>
+            <span class="value {{ 'true' if auth_info.has_token_file else 'false' }}">
+                {{ 'Yes' if auth_info.has_token_file else 'No' }}
+            </span>
+        </div>
+        
+        <div class="status-item">
+            <span class="label">Credentials Valid:</span>
+            <span class="value {{ 'true' if auth_info.credentials_valid else 'false' }}">
+                {{ 'Yes' if auth_info.credentials_valid else 'No' }}
+            </span>
+        </div>
+        
+        <div class="status-item">
+            <span class="label">Session Contains State:</span>
+            <span class="value {{ 'true' if auth_info.session_contains_state else 'false' }}">
+                {{ 'Yes' if auth_info.session_contains_state else 'No' }}
+            </span>
+        </div>
+        
+        <div class="status-item">
+            <span class="label">Session Keys:</span>
+            <span class="value">{{ auth_info.session_keys|join(', ') or 'None' }}</span>
+        </div>
+        
+        <div class="status-item">
+            <span class="label">Redirect URI:</span>
+            <span class="value">{{ auth_info.redirect_uri }}</span>
+        </div>
+    </div>
+    
+    <a href="/" class="button">Home</a>
+    <a href="/start_auth" class="button">Start Authentication</a>
+    {% if auth_info.has_token_file %}
+        <a href="/clear_token" class="button" style="background-color: #f44336;">Clear Token</a>
+    {% endif %}
+</body>
+</html>

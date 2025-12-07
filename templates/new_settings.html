@@ -1,0 +1,339 @@
+{% extends "layout.html" %}
+
+{% block title %}Application Tracker - Settings{% endblock %}
+
+{% block content %}
+<!-- Status Bar -->
+<div class="status-bar">
+    <div class="status-indicator">
+        <div id="connection-dot" class="connection-dot {{ 'connected' if is_authenticated else 'disconnected' }}" title="Connection Status"></div>
+        <div class="status-info">
+            <div id="status-message" class="status-text">
+                {{ 'Connected to Gmail: ' + monitored_email if is_authenticated else 'Not connected to Gmail' }}
+            </div>
+            <div class="status-details">
+                <span id="agent-status">{{ 'All agents active' if is_authenticated else 'Agents inactive' }}</span>
+                •
+                <span id="last-scan">Last scan: {{ last_scan_time or 'Never' }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="status-actions">
+        <a href="/" class="btn btn-primary">Dashboard</a>
+    </div>
+</div>
+
+<h1 class="mb-4">Settings</h1>
+
+<!-- Tabs -->
+<div class="tabs">
+    <div class="tab active" data-tab="email">Email Settings</div>
+    <div class="tab" data-tab="authentication">Authentication</div>
+    <div class="tab" data-tab="preferences">Preferences</div>
+</div>
+
+<!-- Email Settings Tab -->
+<div id="email-tab" class="tab-content active">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Email Configuration</h2>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                <label for="email" class="form-label">Primary Email Address</label>
+                <input type="email" id="email" class="form-control" value="{{ email }}">
+                <div class="d-flex align-items-center mt-2">
+                    <label class="toggle-switch mr-2">
+                        <input type="checkbox" id="primary-email-toggle" {% if primary_email_enabled %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <label for="primary-email-toggle">Enable scanning for this email</label>
+                </div>
+                <small class="form-text">This is the main email used to scan for job applications</small>
+            </div>
+
+            <div class="form-group">
+                <label for="additional-email" class="form-label">Additional Email Address</label>
+                <input type="email" id="additional-email" class="form-control" value="{{ additional_email }}">
+                <div class="d-flex align-items-center mt-2">
+                    <label class="toggle-switch mr-2">
+                        <input type="checkbox" id="additional-email-toggle" {% if additional_email_enabled %}checked{% endif %}>
+                        <span class="slider"></span>
+                    </label>
+                    <label for="additional-email-toggle">Enable scanning for this email</label>
+                </div>
+                <small class="form-text">Optional secondary email to scan for job applications</small>
+            </div>
+
+            <div class="form-actions">
+                <button id="save-email-btn" class="btn btn-primary">Save Email Settings</button>
+                <button id="scan-btn" class="btn btn-secondary">Scan Email Now</button>
+            </div>
+
+            <div id="email-status-message" class="alert mt-3" style="display: none;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Authentication Tab -->
+<div id="authentication-tab" class="tab-content">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Gmail Authentication</h2>
+        </div>
+        <div class="card-body">
+            <div class="status-card mb-4 p-3 bg-light" style="border-radius: var(--border-radius);">
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="font-weight-bold">Connection Status:</span>
+                    <span class="text-{{ 'success' if is_authenticated else 'danger' }}">
+                        {{ 'Connected' if is_authenticated else 'Not connected' }}
+                    </span>
+                </div>
+
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="font-weight-bold">Monitored Email:</span>
+                    <span class="text-{{ 'success' if is_authenticated else 'danger' }}">
+                        {{ monitored_email if is_authenticated else 'None' }}
+                    </span>
+                </div>
+
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="font-weight-bold">Token File Exists:</span>
+                    <span class="text-{{ 'success' if has_token_file else 'danger' }}">
+                        {{ 'Yes' if has_token_file else 'No' }}
+                    </span>
+                </div>
+
+                <div class="d-flex justify-content-between">
+                    <span class="font-weight-bold">Credentials Valid:</span>
+                    <span class="text-{{ 'success' if credentials_valid else 'danger' }}">
+                        {{ 'Yes' if credentials_valid else 'No' }}
+                    </span>
+                </div>
+            </div>
+
+            <p class="mb-3">To scan your emails, the application needs to authenticate with Gmail. This is a one-time process that grants the application read-only access to your emails.</p>
+
+            <div class="form-actions">
+                <a href="/start_auth" class="btn btn-primary">Start Authentication</a>
+                {% if has_token_file %}
+                    <a href="/clear_token" class="btn btn-danger">Clear Token</a>
+                {% endif %}
+                <a href="/auth_status" class="btn btn-secondary">View Detailed Auth Status</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Preferences Tab -->
+<div id="preferences-tab" class="tab-content">
+    <div class="card">
+        <div class="card-header">
+            <h2 class="card-title">Application Preferences</h2>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                <label class="form-label">Default Application Status</label>
+                <select id="default-status" class="form-control">
+                    <option value="applied" selected>Applied</option>
+                    <option value="interview">Interview</option>
+                    <option value="offer">Offer</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="withdrawn">Withdrawn</option>
+                </select>
+                <small class="form-text">Default status for new applications</small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Scan Frequency</label>
+                <select id="scan-frequency" class="form-control">
+                    <option value="manual" selected>Manual Only</option>
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                </select>
+                <small class="form-text">How often to automatically scan emails (not implemented yet)</small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Notification Preferences</label>
+                <div class="d-flex align-items-center mt-2">
+                    <label class="toggle-switch mr-2">
+                        <input type="checkbox" id="email-notifications" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <label for="email-notifications">Email notifications</label>
+                </div>
+                <div class="d-flex align-items-center mt-2">
+                    <label class="toggle-switch mr-2">
+                        <input type="checkbox" id="browser-notifications" checked>
+                        <span class="slider"></span>
+                    </label>
+                    <label for="browser-notifications">Browser notifications</label>
+                </div>
+                <small class="form-text">Notification preferences (not implemented yet)</small>
+            </div>
+
+            <div class="form-actions">
+                <button id="save-preferences-btn" class="btn btn-primary">Save Preferences</button>
+                <button id="reset-preferences-btn" class="btn btn-secondary">Reset to Defaults</button>
+            </div>
+
+            <div id="preferences-status-message" class="alert mt-3" style="display: none;"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Tab functionality
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                const tabId = this.getAttribute('data-tab');
+
+                // Remove active class from all tabs and contents
+                tabs.forEach(t => t.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+
+                // Add active class to current tab and content
+                this.classList.add('active');
+                document.getElementById(`${tabId}-tab`).classList.add('active');
+            });
+        });
+
+        // Save Email Settings
+        document.getElementById('save-email-btn').addEventListener('click', function() {
+            const primaryEmail = document.getElementById('email').value.trim();
+            const additionalEmail = document.getElementById('additional-email').value.trim();
+            const primaryEnabled = document.getElementById('primary-email-toggle').checked;
+            const additionalEnabled = document.getElementById('additional-email-toggle').checked;
+
+            if (!primaryEmail || !primaryEmail.includes('@')) {
+                showEmailMessage('Please enter a valid primary email address', 'danger');
+                return;
+            }
+
+            // First update primary email
+            updateEmailSettings(primaryEmail, 'primary', primaryEnabled)
+                .then(() => {
+                    // Then update additional email if it exists
+                    if (additionalEmail && additionalEmail.includes('@')) {
+                        return updateEmailSettings(additionalEmail, 'additional', additionalEnabled);
+                    } else if (additionalEnabled) {
+                        showEmailMessage('Please enter a valid additional email address or disable it', 'danger');
+                        throw new Error('Invalid additional email');
+                    }
+                    return updateEmailSettings(null, 'additional', additionalEnabled);
+                })
+                .then(result => {
+                    if (result && result.success) {
+                        showEmailMessage('Email settings updated successfully', 'success');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+        });
+
+        function updateEmailSettings(email, type, enabled) {
+            const data = {
+                type: type,
+                enabled: enabled
+            };
+
+            if (email) {
+                data.email = email;
+            }
+
+            return fetch('/settings/email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success) {
+                    showEmailMessage(data.error || `Failed to update ${type} email settings`, 'danger');
+                    throw new Error(data.error || `Failed to update ${type} email settings`);
+                }
+                return data;
+            })
+            .catch(error => {
+                showEmailMessage(`An error occurred updating ${type} email settings`, 'danger');
+                console.error('Error:', error);
+                throw error;
+            });
+        }
+
+        function showEmailMessage(message, type) {
+            const statusEl = document.getElementById('email-status-message');
+            statusEl.textContent = message;
+            statusEl.className = `alert alert-${type} mt-3`;
+            statusEl.style.display = 'block';
+
+            // Optionally hide after some time
+            setTimeout(() => {
+                statusEl.style.display = 'none';
+            }, 5000);
+        }
+
+        // Scan Now button
+        document.getElementById('scan-btn').addEventListener('click', function() {
+            showEmailMessage('Scanning emails... This may take a moment.', 'info');
+
+            fetch('/scan_now')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showEmailMessage(data.message, 'success');
+                    } else {
+                        showEmailMessage(data.error || 'Failed to scan emails', 'danger');
+                    }
+                })
+                .catch(error => {
+                    showEmailMessage('An error occurred during scanning', 'danger');
+                    console.error('Error:', error);
+                });
+        });
+
+        // Save Preferences
+        document.getElementById('save-preferences-btn').addEventListener('click', function() {
+            const defaultStatus = document.getElementById('default-status').value;
+            const scanFrequency = document.getElementById('scan-frequency').value;
+            const emailNotifications = document.getElementById('email-notifications').checked;
+            const browserNotifications = document.getElementById('browser-notifications').checked;
+
+            // This is just a placeholder since these features aren't implemented yet
+            showPreferencesMessage('Preferences saved successfully', 'success');
+        });
+
+        // Reset Preferences
+        document.getElementById('reset-preferences-btn').addEventListener('click', function() {
+            document.getElementById('default-status').value = 'applied';
+            document.getElementById('scan-frequency').value = 'manual';
+            document.getElementById('email-notifications').checked = true;
+            document.getElementById('browser-notifications').checked = true;
+
+            showPreferencesMessage('Preferences reset to defaults', 'success');
+        });
+
+        function showPreferencesMessage(message, type) {
+            const statusEl = document.getElementById('preferences-status-message');
+            statusEl.textContent = message;
+            statusEl.className = `alert alert-${type} mt-3`;
+            statusEl.style.display = 'block';
+
+            // Optionally hide after some time
+            setTimeout(() => {
+                statusEl.style.display = 'none';
+            }, 5000);
+        }
+    });
+</script>
+{% endblock %}

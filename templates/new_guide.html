@@ -1,0 +1,451 @@
+{% extends "layout.html" %}
+
+{% block title %}Application Tracker - User Guide{% endblock %}
+
+{% block styles %}
+<style>
+    .guide-container {
+        max-width: 1000px;
+        margin: 0 auto;
+    }
+    .section {
+        margin-bottom: 40px;
+    }
+    .section h2 {
+        color: var(--primary-color);
+        border-bottom: 2px solid var(--primary-color);
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+    .section h3 {
+        color: var(--success-color);
+        margin-top: 20px;
+        margin-bottom: 10px;
+    }
+    .section p {
+        line-height: 1.6;
+        margin-bottom: 15px;
+    }
+    .section ul, .section ol {
+        margin-bottom: 15px;
+        padding-left: 20px;
+    }
+    .section li {
+        margin-bottom: 8px;
+        line-height: 1.5;
+    }
+    .tip {
+        background-color: #e3f2fd;
+        border-left: 4px solid var(--primary-color);
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: var(--border-radius);
+    }
+    .warning {
+        background-color: #fff8e1;
+        border-left: 4px solid var(--warning-color);
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: var(--border-radius);
+    }
+    .screenshot {
+        max-width: 100%;
+        height: auto;
+        border: 1px solid var(--gray-300);
+        border-radius: var(--border-radius);
+        margin: 20px 0;
+        box-shadow: var(--box-shadow);
+    }
+    .action-button {
+        display: inline-block;
+        padding: 10px 20px;
+        background-color: var(--success-color);
+        color: white;
+        text-decoration: none;
+        border-radius: var(--border-radius);
+        margin-top: 20px;
+        font-weight: bold;
+    }
+    .action-button:hover {
+        background-color: #388E3C;
+        text-decoration: none;
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Status Bar -->
+<div class="status-bar">
+    <div class="status-indicator">
+        <div id="connection-dot" class="connection-dot {{ 'connected' if is_authenticated else 'disconnected' }}" title="Connection Status"></div>
+        <div class="status-info">
+            <div id="status-message" class="status-text">
+                {{ 'Connected to Gmail: ' + monitored_email if is_authenticated else 'Not connected to Gmail' }}
+            </div>
+            <div class="status-details">
+                <span id="agent-status">{{ 'All agents active' if is_authenticated else 'Agents inactive' }}</span>
+                •
+                <span id="last-scan">Last scan: {{ last_scan_time or 'Never' }}</span>
+            </div>
+        </div>
+    </div>
+    <div class="status-actions">
+        <a href="/settings" class="btn btn-primary">Settings</a>
+    </div>
+</div>
+
+<div class="guide-container">
+    <h1 class="mb-4">User Guide</h1>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <div class="tab active" data-tab="overview">Overview</div>
+        <div class="tab" data-tab="getting-started">Getting Started</div>
+        <div class="tab" data-tab="workflows">Workflows</div>
+        <div class="tab" data-tab="troubleshooting">Troubleshooting</div>
+    </div>
+
+    <!-- Overview Tab -->
+    <div id="overview-tab" class="tab-content active">
+        <div class="section">
+            <h2>Welcome to Application Tracker</h2>
+            <p>
+                Application Tracker is a powerful tool designed to help you manage your job applications efficiently.
+                It automatically scans your email for job application-related messages and organizes them in one place,
+                allowing you to track your job search progress with ease.
+            </p>
+
+            <div class="tip">
+                <strong>Tip:</strong> This guide will walk you through all the features and workflows of the Application Tracker.
+                Bookmark this page for future reference!
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Application Flow Overview</h2>
+
+            <div class="mindmap-container">
+                <div class="mindmap">
+                    <div class="mindmap-branch">
+                        <div class="mindmap-level">
+                            <div class="mindmap-node mindmap-root">Application Tracker</div>
+                        </div>
+                        <div class="mindmap-connector"></div>
+                        <div class="mindmap-level">
+                            <div class="mindmap-branch">
+                                <div class="mindmap-node mindmap-primary">Setup</div>
+                                <div class="mindmap-connector"></div>
+                                <div class="mindmap-level">
+                                    <div class="mindmap-branch">
+                                        <div class="mindmap-node mindmap-tertiary">Configure Emails</div>
+                                    </div>
+                                    <div class="mindmap-branch">
+                                        <div class="mindmap-node mindmap-tertiary">Gmail Auth</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mindmap-branch">
+                                <div class="mindmap-node mindmap-primary">Track Applications</div>
+                                <div class="mindmap-connector"></div>
+                                <div class="mindmap-level">
+                                    <div class="mindmap-branch">
+                                        <div class="mindmap-node mindmap-tertiary">Scan Emails</div>
+                                    </div>
+                                    <div class="mindmap-branch">
+                                        <div class="mindmap-node mindmap-tertiary">Manual Entry</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mindmap-branch">
+                                <div class="mindmap-node mindmap-primary">Manage</div>
+                                <div class="mindmap-connector"></div>
+                                <div class="mindmap-level">
+                                    <div class="mindmap-branch">
+                                        <div class="mindmap-node mindmap-tertiary">Update Status</div>
+                                    </div>
+                                    <div class="mindmap-branch">
+                                        <div class="mindmap-node mindmap-tertiary">Add Notes</div>
+                                    </div>
+                                    <div class="mindmap-branch">
+                                        <div class="mindmap-node mindmap-tertiary">Export Data</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <p>
+                The Application Tracker workflow consists of three main components:
+            </p>
+
+            <div class="workflow-steps">
+                <div class="workflow-step">
+                    <h4>Setup</h4>
+                    <p>
+                        Configure your email settings and authenticate with Gmail to allow the application to scan your emails.
+                        You can set up multiple email addresses and control which ones are used for scanning.
+                    </p>
+                </div>
+
+                <div class="workflow-step">
+                    <h4>Track Applications</h4>
+                    <p>
+                        Scan your emails for job application-related messages or manually add applications.
+                        The system will automatically categorize and organize your applications.
+                    </p>
+                </div>
+
+                <div class="workflow-step">
+                    <h4>Manage</h4>
+                    <p>
+                        Update the status of your applications, add notes, and export your data for backup or analysis.
+                        Keep track of your job search progress and never miss an opportunity.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Key Features</h2>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>Multiple Email Support</h4>
+                    <p>Configure multiple email addresses and control which ones are used for scanning.</p>
+                </div>
+
+                <div class="feature-card">
+                    <h4>Automatic Email Scanning</h4>
+                    <p>Automatically scan your emails for job application-related messages.</p>
+                </div>
+
+                <div class="feature-card">
+                    <h4>Application Status Tracking</h4>
+                    <p>Track the status of your applications from applied to offer/rejection.</p>
+                </div>
+
+                <div class="feature-card">
+                    <h4>Manual Application Entry</h4>
+                    <p>Manually add applications that weren't detected through email scanning.</p>
+                </div>
+
+                <div class="feature-card">
+                    <h4>Notes and Comments</h4>
+                    <p>Add notes and comments to your applications to keep track of important details.</p>
+                </div>
+
+                <div class="feature-card">
+                    <h4>Data Export</h4>
+                    <p>Export your application data to CSV for backup or further analysis.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Getting Started Tab -->
+    <div id="getting-started-tab" class="tab-content">
+        <div class="section">
+            <h2>Getting Started</h2>
+
+            <h3>1. Configure Your Email Settings</h3>
+            <p>
+                The first step is to configure your email settings. The application supports two email addresses:
+            </p>
+            <ul>
+                <li><strong>Primary Email:</strong> This is your main email address used for job applications (elyamworks@gmail.com by default).</li>
+                <li><strong>Secondary Email:</strong> An optional secondary email address (elyam.work@gmail.com by default, disabled).</li>
+            </ul>
+            <p>
+                To configure your email settings:
+            </p>
+            <ol>
+                <li>Go to the <a href="/settings">Settings</a> page.</li>
+                <li>Click on the "Email Settings" tab.</li>
+                <li>Enter your primary email address.</li>
+                <li>Optionally, enter a secondary email address.</li>
+                <li>Use the toggles to enable or disable each email address.</li>
+                <li>Click "Save Email Settings" to save your changes.</li>
+            </ol>
+
+            <div class="tip">
+                <strong>Tip:</strong> You can enable or disable email addresses at any time. Disabled email addresses will not be scanned.
+            </div>
+
+            <h3>2. Authenticate with Gmail</h3>
+            <p>
+                To scan your emails, the application needs to authenticate with Gmail. This is a one-time process:
+            </p>
+            <ol>
+                <li>Go to the <a href="/settings">Settings</a> page.</li>
+                <li>Click on the "Authentication" tab.</li>
+                <li>Click "Start Authentication" in the Gmail Authentication section.</li>
+                <li>Follow the prompts to authenticate with Gmail.</li>
+                <li>Once authenticated, you'll be redirected back to the application.</li>
+            </ol>
+
+            <div class="warning">
+                <strong>Note:</strong> The application only requests read-only access to your emails. It cannot modify or delete any emails.
+            </div>
+
+            <h3>3. Scan Your Emails</h3>
+            <p>
+                Once you've configured your email settings and authenticated with Gmail, you can scan your emails for job applications:
+            </p>
+            <ol>
+                <li>Go to the <a href="/settings">Settings</a> page.</li>
+                <li>Click on the "Email Settings" tab.</li>
+                <li>Click "Scan Email Now" to start scanning your emails.</li>
+                <li>The application will scan your enabled email addresses for job application-related messages.</li>
+                <li>Once the scan is complete, you'll see a summary of the results.</li>
+            </ol>
+
+            <h3>4. View and Manage Your Applications</h3>
+            <p>
+                After scanning your emails, you can view and manage your applications on the <a href="/">Dashboard</a>:
+            </p>
+            <ul>
+                <li>View all your applications in one place.</li>
+                <li>Filter applications by status, company, role, etc.</li>
+                <li>Update the status of your applications.</li>
+                <li>Add notes and comments to your applications.</li>
+                <li>Export your application data to CSV.</li>
+            </ul>
+
+            <a href="/" class="action-button">Go to Dashboard</a>
+        </div>
+    </div>
+
+    <!-- Workflows Tab -->
+    <div id="workflows-tab" class="tab-content">
+        <div class="section">
+            <h2>Detailed Workflows</h2>
+
+            <h3>Email Configuration</h3>
+            <p>
+                The application allows you to configure two email addresses:
+            </p>
+            <ul>
+                <li><strong>Primary Email (elyamworks@gmail.com):</strong> Enabled by default, this is your main email for job applications.</li>
+                <li><strong>Secondary Email (elyam.work@gmail.com):</strong> Disabled by default, this is an optional secondary email.</li>
+            </ul>
+            <p>
+                You can enable or disable each email address independently. Only enabled email addresses will be scanned for job applications.
+            </p>
+
+            <h3>Gmail Authentication</h3>
+            <p>
+                The application uses OAuth to authenticate with Gmail. This is a secure authentication method that doesn't require you to share your password.
+                The application only requests read-only access to your emails, so it cannot modify or delete any emails.
+            </p>
+            <p>
+                The authentication process is simple:
+            </p>
+            <ol>
+                <li>Click "Start Authentication" on the Settings page.</li>
+                <li>You'll be redirected to Google's authentication page.</li>
+                <li>Sign in with your Google account and grant the requested permissions.</li>
+                <li>You'll be redirected back to the application.</li>
+            </ol>
+            <p>
+                Once authenticated, the application will store a token that allows it to access your emails. You can revoke this access at any time by clicking "Clear Token" on the Settings page.
+            </p>
+
+            <h3>Email Scanning</h3>
+            <p>
+                The email scanning process works as follows:
+            </p>
+            <ol>
+                <li>The application connects to Gmail using your authentication token.</li>
+                <li>It searches for emails related to job applications in your enabled email addresses.</li>
+                <li>It extracts relevant information from these emails (company, role, date, etc.).</li>
+                <li>It adds this information to your application database.</li>
+            </ol>
+            <p>
+                The scanning process is designed to be non-intrusive and efficient. It only scans for job application-related emails and doesn't access any other emails.
+            </p>
+
+            <h3>Application Management</h3>
+            <p>
+                Once your applications are in the system, you can manage them in various ways:
+            </p>
+            <ul>
+                <li><strong>Update Status:</strong> Track the progress of your applications from applied to offer/rejection.</li>
+                <li><strong>Add Notes:</strong> Keep track of important details, interview questions, or follow-up tasks.</li>
+                <li><strong>Filter and Search:</strong> Quickly find specific applications by company, role, status, etc.</li>
+                <li><strong>Export Data:</strong> Export your application data to CSV for backup or further analysis.</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Troubleshooting Tab -->
+    <div id="troubleshooting-tab" class="tab-content">
+        <div class="section">
+            <h2>Troubleshooting</h2>
+
+            <h3>Authentication Issues</h3>
+            <p>
+                If you're having trouble authenticating with Gmail:
+            </p>
+            <ul>
+                <li>Make sure you're using a valid Gmail account.</li>
+                <li>Try clearing your browser cache and cookies.</li>
+                <li>Click "Clear Token" on the Settings page and try authenticating again.</li>
+                <li>Check the Authentication Status page for more detailed information.</li>
+            </ul>
+
+            <h3>Email Scanning Issues</h3>
+            <p>
+                If the email scanning isn't working as expected:
+            </p>
+            <ul>
+                <li>Make sure you've authenticated with Gmail.</li>
+                <li>Check that you have at least one email address enabled for scanning.</li>
+                <li>Verify that your email addresses are correct.</li>
+                <li>Try scanning again after a few minutes.</li>
+            </ul>
+
+            <h3>Application Management Issues</h3>
+            <p>
+                If you're having trouble managing your applications:
+            </p>
+            <ul>
+                <li>Make sure you're using the latest version of the application.</li>
+                <li>Try refreshing the page.</li>
+                <li>Check the application logs for any error messages.</li>
+                <li>Contact support if the issue persists.</li>
+            </ul>
+
+            <div class="warning">
+                <strong>Need Help?</strong> If you're still experiencing issues, please contact support for assistance.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Tab functionality
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                const tabId = this.getAttribute('data-tab');
+
+                // Remove active class from all tabs and contents
+                tabs.forEach(t => t.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+
+                // Add active class to current tab and content
+                this.classList.add('active');
+                document.getElementById(`${tabId}-tab`).classList.add('active');
+            });
+        });
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Application Tracker{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/modern.css') }}">
+    {% block styles %}{% endblock %}
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-container">
+            <a href="/" class="navbar-brand">
+                <span>Application Tracker</span>
+            </a>
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">Dashboard</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/settings" class="nav-link {% if request.path == '/settings' %}active{% endif %}">Settings</a>
+                </li>
+                <li class="nav-item">
+                    <a href="/guide" class="nav-link {% if request.path == '/guide' %}active{% endif %}">User Guide</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="container">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-text">
+                    &copy; 2025 Application Tracker. All rights reserved.
+                </div>
+                <div class="footer-links">
+                    <a href="/guide" class="footer-link">User Guide</a>
+                    <a href="/settings" class="footer-link">Settings</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>
